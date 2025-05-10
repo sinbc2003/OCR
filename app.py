@@ -7,6 +7,11 @@ import requests
 import time
 import json
 from streamlit_ace import st_ace
+from datetime import datetime
+import pandas as pd
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
 
 # 페이지 설정
 st.set_page_config(
@@ -51,6 +56,16 @@ st.markdown("""
     .stButton>button:hover {
         background-color: #1E40AF;
     }
+    .submit-button>button {
+        background-color: #10B981;
+        color: white;
+        padding: 0.75rem 1.5rem;
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+    .submit-button>button:hover {
+        background-color: #059669;
+    }
     .latex-preview {
         padding: 1rem;
         border: 1px solid #E5E7EB;
@@ -80,6 +95,13 @@ st.markdown("""
         margin: 0 auto;
         display: block;
     }
+    .user-info-box {
+        padding: 1rem;
+        background-color: #EFF6FF;
+        border: 1px solid #BFDBFE;
+        border-radius: 0.375rem;
+        margin-bottom: 1.5rem;
+    }
     footer {
         margin-top: 3rem;
         text-align: center;
@@ -93,14 +115,101 @@ st.markdown("""
 st.title("수학 손글씨 LaTeX 변환기")
 st.markdown("손으로 작성한 수학 문제를 업로드하여 LaTeX 코드로 변환하고 실시간으로 렌더링해보세요.")
 
-# OpenAI API 키 설정
-if 'OPENAI_API_KEY' in st.secrets:
-    api_key = st.secrets['OPENAI_API_KEY']
-else:
-    api_key = st.text_input("OpenAI API 키를 입력하세요:", type="password")
-    if not api_key:
-        st.warning("API 키를 입력하셔야 서비스를 이용할 수 있습니다.")
-        st.stop()
+# 세션 상태 초기화
+if 'is_logged_in' not in st.session_state:
+    st.session_state.is_logged_in = False
+if 'student_id' not in st.session_state:
+    st.session_state.student_id = ""
+if 'student_name' not in st.session_state:
+    st.session_state.student_name = ""
+if 'latex_code' not in st.session_state:
+    st.session_state.latex_code = ""
+if 'original_image' not in st.session_state:
+    st.session_state.original_image = None
+if 'upload_status' not in st.session_state:
+    st.session_state.upload_status = None
+if 'processing_complete' not in st.session_state:
+    st.session_state.processing_complete = False
+
+# API 키 및 구글 드라이브 설정 가져오기
+api_key = st.secrets.get("OPENAI_API_KEY", "")
+drive_folder_id = st.secrets.get("DRIVE_FOLDER_ID", "")
+
+# 구글 드라이브 인증 및 서비스 설정
+def get_drive_service():
+    try:
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        service = build('drive', 'v3', credentials=credentials)
+        return service
+    except Exception as e:
+        st.error(f"구글 드라이브 인증 오류: {str(e)}")
+        return None
+
+# 이미지를 구글 드라이브에 업로드하는 함수
+def upload_to_drive(image, filename, folder_id, mime_type="image/jpeg"):
+    try:
+        service = get_drive_service()
+        if service is None:
+            return False, "드라이브 서비스 초기화 실패"
+        
+        buffered = io.BytesIO()
+        image.save(buffered, format="JPEG")
+        buffered.seek(0)
+        
+        file_metadata = {
+            'name': filename,
+            'parents': [folder_id]
+        }
+        
+        media = MediaIoBaseUpload(
+            buffered, 
+            mimetype=mime_type,
+            resumable=True
+        )
+        
+        file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        ).execute()
+        
+        return True, file.get('id')
+    except Exception as e:
+        return False, f"이미지 업로드 오류: {str(e)}"
+
+# 텍스트 파일을 구글 드라이브에 업로드하는 함수
+def upload_text_to_drive(text, filename, folder_id):
+    try:
+        service = get_drive_service()
+        if service is None:
+            return False, "드라이브 서비스 초기화 실패"
+        
+        text_bytes = text.encode('utf-8')
+        buffered = io.BytesIO(text_bytes)
+        
+        file_metadata = {
+            'name': filename,
+            'parents': [folder_id]
+        }
+        
+        media = MediaIoBaseUpload(
+            buffered, 
+            mimetype='text/plain',
+            resumable=True
+        )
+        
+        file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        ).execute()
+        
+        return True, file.get('id')
+    except Exception as e:
+        return False, f"텍스트 업로드 오류: {str(e)}"
 
 # 이미지를 OpenAI API로 전송하여 LaTeX 추출하는 함수
 def extract_latex_from_image(image_data, api_key):
@@ -155,6 +264,40 @@ def extract_latex_from_image(image_data, api_key):
     except Exception as e:
         return f"오류 발생: {str(e)}"
 
+# 사용자 로그인 화면
+if not st.session_state.is_logged_in:
+    st.markdown("## 학생 정보 입력")
+    st.markdown('<div class="user-info-box">', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        student_id = st.text_input("학번을 입력하세요:", placeholder="예: 20230123")
+    
+    with col2:
+        student_name = st.text_input("이름을 입력하세요:", placeholder="예: 홍길동")
+    
+    if st.button("시작하기"):
+        if student_id and student_name:
+            st.session_state.student_id = student_id
+            st.session_state.student_name = student_name
+            st.session_state.is_logged_in = True
+            st.experimental_rerun()
+        else:
+            st.error("학번과 이름을 모두 입력해주세요.")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 로그인 전에는 나머지 콘텐츠를 표시하지 않음
+    st.stop()
+
+# 로그인 후 화면
+st.markdown(f"""
+<div class="user-info-box">
+    <p><strong>학번:</strong> {st.session_state.student_id} | <strong>이름:</strong> {st.session_state.student_name}</p>
+</div>
+""", unsafe_allow_html=True)
+
 # 애플리케이션 레이아웃 - 2개 열로 나누기
 col1, col2 = st.columns(2)
 
@@ -172,20 +315,19 @@ with col1:
     # 이미지 미리보기 및 처리 버튼
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
+        st.session_state.original_image = image  # 세션에 원본 이미지 저장
         st.image(image, caption="업로드한 이미지", use_column_width=True)
         
         if st.button("이미지 처리하기"):
             with st.spinner("이미지 분석 중... 잠시만 기다려주세요."):
-                # 세션 상태에 저장된 API 키를 사용하여 이미지 처리
+                # API 키를 사용하여 이미지 처리
                 latex_result = extract_latex_from_image(image, api_key)
                 st.session_state.latex_code = latex_result
+                st.session_state.processing_complete = True
+                st.experimental_rerun()
 
 with col2:
     st.header("2. LaTeX 코드 편집")
-    
-    # 초기 LaTeX 코드 설정
-    if 'latex_code' not in st.session_state:
-        st.session_state.latex_code = ""
     
     # LaTeX 코드 에디터
     st.markdown('<div class="editor-section">', unsafe_allow_html=True)
@@ -220,7 +362,7 @@ with col2:
         st.download_button(
             label="LaTeX 코드 다운로드",
             data=latex_bytes,
-            file_name="math_latex_code.tex",
+            file_name=f"{st.session_state.student_id}_{st.session_state.student_name}_latex.tex",
             mime="text/plain"
         )
     else:
@@ -231,6 +373,147 @@ with col2:
             </p>
         </div>
         """, unsafe_allow_html=True)
+
+# 최종 제출 섹션 (처리가 완료된 경우에만 표시)
+if st.session_state.processing_complete and st.session_state.original_image is not None:
+    st.markdown("---")
+    st.markdown("## 최종 확인 및 제출")
+    st.markdown("아래 버튼을 클릭하면 이미지와 LaTeX 코드가 시스템에 제출됩니다.")
+    
+    submit_button_placeholder = st.empty()
+    status_placeholder = st.empty()
+    
+    if st.session_state.upload_status is None:
+        if submit_button_placeholder.button("최종 확인 완료 및 제출", key="submit_button", type="primary"):
+            with st.spinner("제출 중..."):
+                # 현재 시간을 파일명에 포함
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                image_filename = f"{st.session_state.student_id}_{st.session_state.student_name}_{timestamp}.jpg"
+                latex_filename = f"{st.session_state.student_id}_{st.session_state.student_name}_{timestamp}.tex"
+                
+                # 이미지 업로드
+                image_success, image_result = upload_to_drive(
+                    st.session_state.original_image, 
+                    image_filename, 
+                    drive_folder_id
+                )
+                
+                # LaTeX 텍스트 업로드
+                text_success, text_result = upload_text_to_drive(
+                    st.session_state.latex_code,
+                    latex_filename,
+                    drive_folder_id
+                )
+                
+                if image_success and text_success:
+                    st.session_state.upload_status = "success"
+                    upload_info = {
+                        "student_id": st.session_state.student_id,
+                        "student_name": st.session_state.student_name,
+                        "image_file": image_filename,
+                        "latex_file": latex_filename,
+                        "timestamp": timestamp,
+                        "image_id": image_result,
+                        "latex_id": text_result
+                    }
+                    
+                    # 로그 파일 작성 시도
+                    try:
+                        log_filename = f"submission_log_{datetime.now().strftime('%Y%m%d')}.csv"
+                        
+                        # 로그 파일이 존재하는지 확인
+                        log_exists = False
+                        try:
+                            files = get_drive_service().files().list(
+                                q=f"name='{log_filename}' and '{drive_folder_id}' in parents",
+                                spaces='drive'
+                            ).execute().get('files', [])
+                            log_exists = len(files) > 0
+                            log_file_id = files[0]['id'] if log_exists else None
+                        except:
+                            log_exists = False
+                        
+                        log_data = pd.DataFrame([upload_info])
+                        
+                        if log_exists and log_file_id:
+                            # 기존 파일 다운로드
+                            request = get_drive_service().files().get_media(fileId=log_file_id)
+                            fh = io.BytesIO()
+                            downloader = MediaIoBaseUpload(fh)
+                            done = False
+                            while done is False:
+                                status, done = downloader.next_chunk()
+                            
+                            fh.seek(0)
+                            existing_log = pd.read_csv(fh)
+                            updated_log = pd.concat([existing_log, log_data], ignore_index=True)
+                            
+                            # 업데이트된 파일 업로드
+                            log_buffer = io.StringIO()
+                            updated_log.to_csv(log_buffer, index=False)
+                            log_bytes = log_buffer.getvalue().encode()
+                            log_buffered = io.BytesIO(log_bytes)
+                            
+                            media = MediaIoBaseUpload(
+                                log_buffered, 
+                                mimetype='text/csv',
+                                resumable=True
+                            )
+                            
+                            get_drive_service().files().update(
+                                fileId=log_file_id,
+                                media_body=media
+                            ).execute()
+                        else:
+                            # 새 로그 파일 생성
+                            log_buffer = io.StringIO()
+                            log_data.to_csv(log_buffer, index=False)
+                            log_bytes = log_buffer.getvalue().encode()
+                            log_buffered = io.BytesIO(log_bytes)
+                            
+                            file_metadata = {
+                                'name': log_filename,
+                                'parents': [drive_folder_id]
+                            }
+                            
+                            media = MediaIoBaseUpload(
+                                log_buffered, 
+                                mimetype='text/csv',
+                                resumable=True
+                            )
+                            
+                            get_drive_service().files().create(
+                                body=file_metadata,
+                                media_body=media,
+                                fields='id'
+                            ).execute()
+                    except Exception as e:
+                        st.warning(f"로그 파일 생성 중 오류 발생: {str(e)}")
+                        
+                else:
+                    st.session_state.upload_status = "error"
+                    st.session_state.error_message = "이미지 업로드: " + ("성공" if image_success else image_result)
+                    st.session_state.error_message += " | LaTeX 업로드: " + ("성공" if text_success else text_result)
+    
+    if st.session_state.upload_status == "success":
+        submit_button_placeholder.empty()
+        status_placeholder.success("제출이 완료되었습니다! 제출해 주셔서 감사합니다.")
+        
+        if st.button("다시 시작하기", key="restart"):
+            # 세션 초기화
+            st.session_state.latex_code = ""
+            st.session_state.original_image = None
+            st.session_state.upload_status = None
+            st.session_state.processing_complete = False
+            st.experimental_rerun()
+            
+    elif st.session_state.upload_status == "error":
+        submit_button_placeholder.empty()
+        status_placeholder.error(f"제출 중 오류가 발생했습니다. {st.session_state.error_message}")
+        
+        if st.button("다시 시도하기", key="retry"):
+            st.session_state.upload_status = None
+            st.experimental_rerun()
 
 # 하단 정보
 st.markdown("""
