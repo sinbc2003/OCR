@@ -134,19 +134,28 @@ if 'processing_complete' not in st.session_state:
 # API 키 및 구글 드라이브 설정 가져오기
 api_key = st.secrets.get("OPENAI_API_KEY", "")
 drive_folder_id = st.secrets.get("DRIVE_FOLDER_ID", "")
+spreadsheet_id = st.secrets.get("SPREADSHEET_ID", "")
 
-# 구글 드라이브 인증 및 서비스 설정
-def get_drive_service():
+# 구글 API 인증 및 서비스 설정
+def get_google_service(api_name, api_version, scopes):
     try:
         credentials = service_account.Credentials.from_service_account_info(
             st.secrets["gcp_service_account"],
-            scopes=["https://www.googleapis.com/auth/drive"]
+            scopes=scopes
         )
-        service = build('drive', 'v3', credentials=credentials)
+        service = build(api_name, api_version, credentials=credentials)
         return service
     except Exception as e:
-        st.error(f"구글 드라이브 인증 오류: {str(e)}")
+        st.error(f"구글 서비스 인증 오류: {str(e)}")
         return None
+
+# 구글 드라이브 서비스 초기화
+def get_drive_service():
+    return get_google_service('drive', 'v3', ['https://www.googleapis.com/auth/drive'])
+
+# 구글 시트 서비스 초기화
+def get_sheets_service():
+    return get_google_service('sheets', 'v4', ['https://www.googleapis.com/auth/spreadsheets'])
 
 # 이미지를 구글 드라이브에 업로드하는 함수
 def upload_to_drive(image, filename, folder_id, mime_type="image/jpeg"):
@@ -180,36 +189,42 @@ def upload_to_drive(image, filename, folder_id, mime_type="image/jpeg"):
     except Exception as e:
         return False, f"이미지 업로드 오류: {str(e)}"
 
-# 텍스트 파일을 구글 드라이브에 업로드하는 함수
-def upload_text_to_drive(text, filename, folder_id):
+# 구글 시트에 LaTeX 코드 추가하는 함수
+def append_to_sheet(spreadsheet_id, student_id, student_name, latex_code, image_id):
     try:
-        service = get_drive_service()
+        service = get_sheets_service()
         if service is None:
-            return False, "드라이브 서비스 초기화 실패"
+            return False, "시트 서비스 초기화 실패"
         
-        text_bytes = text.encode('utf-8')
-        buffered = io.BytesIO(text_bytes)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        file_metadata = {
-            'name': filename,
-            'parents': [folder_id]
+        # 시트에 추가할 데이터
+        values = [
+            [
+                student_id,                  # A열: 학번
+                student_name,                # B열: 이름
+                latex_code,                  # C열: LaTeX 코드
+                timestamp,                   # D열: 제출 시간
+                f"https://drive.google.com/file/d/{image_id}/view"  # E열: 이미지 링크
+            ]
+        ]
+        
+        body = {
+            'values': values
         }
         
-        media = MediaIoBaseUpload(
-            buffered, 
-            mimetype='text/plain',
-            resumable=True
-        )
-        
-        file = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id'
+        # 시트의 마지막 행에 데이터 추가
+        result = service.spreadsheets().values().append(
+            spreadsheetId=spreadsheet_id,
+            range='Sheet1!A:E',  # 시트 이름과 범위 지정
+            valueInputOption='RAW',
+            insertDataOption='INSERT_ROWS',
+            body=body
         ).execute()
         
-        return True, file.get('id')
+        return True, result
     except Exception as e:
-        return False, f"텍스트 업로드 오류: {str(e)}"
+        return False, f"시트 업데이트 오류: {str(e)}"
 
 # 이미지를 OpenAI API로 전송하여 LaTeX 추출하는 함수
 def extract_latex_from_image(image_data, api_key):
@@ -389,111 +404,32 @@ if st.session_state.processing_complete and st.session_state.original_image is n
                 # 현재 시간을 파일명에 포함
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 image_filename = f"{st.session_state.student_id}_{st.session_state.student_name}_{timestamp}.jpg"
-                latex_filename = f"{st.session_state.student_id}_{st.session_state.student_name}_{timestamp}.tex"
                 
-                # 이미지 업로드
-                image_success, image_result = upload_to_drive(
+                # 1. 이미지 업로드
+                image_success, image_id = upload_to_drive(
                     st.session_state.original_image, 
                     image_filename, 
                     drive_folder_id
                 )
                 
-                # LaTeX 텍스트 업로드
-                text_success, text_result = upload_text_to_drive(
-                    st.session_state.latex_code,
-                    latex_filename,
-                    drive_folder_id
-                )
-                
-                if image_success and text_success:
-                    st.session_state.upload_status = "success"
-                    upload_info = {
-                        "student_id": st.session_state.student_id,
-                        "student_name": st.session_state.student_name,
-                        "image_file": image_filename,
-                        "latex_file": latex_filename,
-                        "timestamp": timestamp,
-                        "image_id": image_result,
-                        "latex_id": text_result
-                    }
+                # 2. 구글 시트에 LaTeX 코드 추가
+                if image_success:
+                    sheet_success, sheet_result = append_to_sheet(
+                        spreadsheet_id,
+                        st.session_state.student_id,
+                        st.session_state.student_name,
+                        st.session_state.latex_code,
+                        image_id
+                    )
                     
-                    # 로그 파일 작성 시도
-                    try:
-                        log_filename = f"submission_log_{datetime.now().strftime('%Y%m%d')}.csv"
-                        
-                        # 로그 파일이 존재하는지 확인
-                        log_exists = False
-                        try:
-                            files = get_drive_service().files().list(
-                                q=f"name='{log_filename}' and '{drive_folder_id}' in parents",
-                                spaces='drive'
-                            ).execute().get('files', [])
-                            log_exists = len(files) > 0
-                            log_file_id = files[0]['id'] if log_exists else None
-                        except:
-                            log_exists = False
-                        
-                        log_data = pd.DataFrame([upload_info])
-                        
-                        if log_exists and log_file_id:
-                            # 기존 파일 다운로드
-                            request = get_drive_service().files().get_media(fileId=log_file_id)
-                            fh = io.BytesIO()
-                            downloader = MediaIoBaseUpload(fh)
-                            done = False
-                            while done is False:
-                                status, done = downloader.next_chunk()
-                            
-                            fh.seek(0)
-                            existing_log = pd.read_csv(fh)
-                            updated_log = pd.concat([existing_log, log_data], ignore_index=True)
-                            
-                            # 업데이트된 파일 업로드
-                            log_buffer = io.StringIO()
-                            updated_log.to_csv(log_buffer, index=False)
-                            log_bytes = log_buffer.getvalue().encode()
-                            log_buffered = io.BytesIO(log_bytes)
-                            
-                            media = MediaIoBaseUpload(
-                                log_buffered, 
-                                mimetype='text/csv',
-                                resumable=True
-                            )
-                            
-                            get_drive_service().files().update(
-                                fileId=log_file_id,
-                                media_body=media
-                            ).execute()
-                        else:
-                            # 새 로그 파일 생성
-                            log_buffer = io.StringIO()
-                            log_data.to_csv(log_buffer, index=False)
-                            log_bytes = log_buffer.getvalue().encode()
-                            log_buffered = io.BytesIO(log_bytes)
-                            
-                            file_metadata = {
-                                'name': log_filename,
-                                'parents': [drive_folder_id]
-                            }
-                            
-                            media = MediaIoBaseUpload(
-                                log_buffered, 
-                                mimetype='text/csv',
-                                resumable=True
-                            )
-                            
-                            get_drive_service().files().create(
-                                body=file_metadata,
-                                media_body=media,
-                                fields='id'
-                            ).execute()
-                    except Exception as e:
-                        st.warning(f"로그 파일 생성 중 오류 발생: {str(e)}")
-                        
+                    if sheet_success:
+                        st.session_state.upload_status = "success"
+                    else:
+                        st.session_state.upload_status = "error"
+                        st.session_state.error_message = f"구글 시트 업데이트 오류: {sheet_result}"
                 else:
                     st.session_state.upload_status = "error"
-                    st.session_state.error_message = "이미지 업로드: " + ("성공" if image_success else image_result)
-                    st.session_state.error_message += " | LaTeX 업로드: " + ("성공" if text_success else text_result)
+                    st.session_state.error_message = f"이미지 업로드 오류: {image_id}"
     
     if st.session_state.upload_status == "success":
         submit_button_placeholder.empty()
