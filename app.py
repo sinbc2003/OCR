@@ -588,13 +588,14 @@ with col2:
     st.header("2. LaTeX 코드 편집")
     st.markdown('<div class="editor-section">', unsafe_allow_html=True)
     
-    editor_value = st.session_state.latex_code if st.session_state.latex_code else ""
+    # 여기를 수정: session_state.latex_code가 이미 설정되어 있는지 확인
+    editor_value = st.session_state.latex_code
     
     # theme="chrome"로 강제 라이트 테마
     new_latex_code = st_ace(
         value=editor_value,
         language="latex",
-        theme="chrome",  # 또는 "xcode", "textmate", ...
+        theme="chrome",
         placeholder="여기에 LaTeX 코드가 표시됩니다. 필요 시 직접 편집하세요.",
         height=300,
         key="latex_editor",
@@ -630,6 +631,7 @@ with col2:
     
     st.header("3. 렌더링 결과")
     if st.session_state.latex_code:
+        # 렌더링 함수 사용
         display_latex_with_rendering(st.session_state.latex_code)
         
         # 다운로드 버튼
