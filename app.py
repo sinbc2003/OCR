@@ -138,6 +138,10 @@ def upload_to_drive(image, filename, folder_id, mime_type="image/jpeg"):
         if service is None:
             return False, "드라이브 서비스가 None임."
         
+        # 혹시 여전히 RGBA일 경우 대비
+        if image.mode == 'RGBA':
+            image = image.convert('RGB')
+        
         buffered = io.BytesIO()
         image.save(buffered, format="JPEG")
         buffered.seek(0)
@@ -194,7 +198,7 @@ def append_to_sheet(spreadsheet_id, student_id, student_name, latex_code, image_
 def extract_latex_from_image(image_data, api_key):
     """
     이미지 속 손글씨 수식을 'o4-mini' 모델로 변환.
-    불필요한 파라미터(max_tokens, temperature 등)를 모두 제거.
+    불필요한 파라미터(max_tokens, temperature 등)는 모두 제거.
     """
     status_box = st.empty()
     
@@ -202,11 +206,11 @@ def extract_latex_from_image(image_data, api_key):
         if not api_key or len(api_key) < 10:
             raise ValueError("유효한 OpenAI API 키가 없습니다. (secrets에 OPENAI_API_KEY 필요)")
         
-        # 이미지 전처리
-        status_box.info("이미지 전처리 중...")
+        # 이미지가 RGBA면 RGB로 변환
         if image_data.mode == 'RGBA':
             image_data = image_data.convert('RGB')
         
+        # 크기 제한 (1500px 넘으면 축소)
         max_size = 1500
         if image_data.width > max_size or image_data.height > max_size:
             ratio = min(max_size / image_data.width, max_size / image_data.height)
@@ -289,9 +293,7 @@ def extract_latex_from_image(image_data, api_key):
 
 # -------------------- 렌더링 함수 --------------------
 def display_latex_with_rendering(latex_code: str):
-    """
-    $$...$$ 구문을 st.markdown()에 넣으면 MathJax로 자동 렌더링됨.
-    """
+    """$$...$$ 구문을 st.markdown()에 넣으면 MathJax로 자동 렌더링됨."""
     st.markdown(latex_code)
 
 # -------------------- (A) 로그인 --------------------
@@ -340,7 +342,10 @@ with left_col:
             image = Image.open(uploaded_file)
             st.write(f"이미지 정보: {image.format}, {image.size}, {image.mode}")
             
-            # 업로드 이미지 세션에 저장
+            # RGBA -> RGB 변환 (최종 제출 오류 방지)
+            if image.mode == 'RGBA':
+                image = image.convert('RGB')
+            
             st.session_state.original_image = image
             st.image(image, caption="업로드된 이미지", use_column_width=True)
             
@@ -370,30 +375,22 @@ with right_col:
     st.header("2. LaTeX 코드 편집")
     st.markdown('<div class="editor-section">', unsafe_allow_html=True)
     
-    # 메모장처럼 사용 가능한 text_area
-    new_latex = st.text_area(
+    # 사용자가 직접 '렌더링 적용' 버튼을 누르기 전까지는 세션 상태를 갱신하지 않음
+    # 임시 변수에 현재 세션의 LaTeX 코드를 표시
+    temp_latex = st.text_area(
         "LaTeX 코드 (수정 가능)",
         value=st.session_state.latex_code,
         height=300
     )
-    
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # 사용자가 수정하면 세션 반영
-    if new_latex != st.session_state.latex_code:
-        st.session_state.latex_code = new_latex
+    # 렌더링 반영 버튼
+    if st.button("렌더링 적용"):
+        st.session_state.latex_code = temp_latex
     
     st.header("3. 렌더링 결과")
     if st.session_state.latex_code.strip():
         display_latex_with_rendering(st.session_state.latex_code)
-        # 다운로드 버튼
-        latex_bytes = st.session_state.latex_code.encode("utf-8")
-        st.download_button(
-            label="LaTeX 코드 다운로드",
-            data=latex_bytes,
-            file_name=f"{st.session_state.student_id}_{st.session_state.student_name}_latex.tex",
-            mime="text/plain"
-        )
     else:
         st.info("아직 변환된 LaTeX 코드가 없습니다.")
 
