@@ -48,33 +48,10 @@ st.markdown(
         background-color: #1E40AF !important;
         color: #ffffff !important;
     }
-    /* 컨테이너, 박스 디자인 */
+    /* 앱 레이아웃 */
     .stApp {
         max-width: 1200px;
         margin: 0 auto;
-    }
-    .user-info-box {
-        padding: 1rem;
-        background-color: #F3F4F6;
-        border: 1px solid #D1D5DB;
-        border-radius: 0.375rem;
-        margin-bottom: 1.5rem;
-    }
-    .upload-section {
-        padding: 1.5rem;
-        border: 1px dashed #9CA3AF;
-        border-radius: 0.375rem;
-        background-color: #F9FAFB;
-        text-align: center;
-        margin-bottom: 1.5rem;
-        color: #000000 !important;
-    }
-    .editor-section {
-        padding: 1rem;
-        border: 1px solid #E5E7EB;
-        border-radius: 0.375rem;
-        background-color: #FFFFFF;
-        margin-bottom: 1.5rem;
     }
     footer {
         margin-top: 3rem;
@@ -95,6 +72,8 @@ if 'student_id' not in st.session_state:
     st.session_state.student_id = ""
 if 'student_name' not in st.session_state:
     st.session_state.student_name = ""
+if 'doc_type' not in st.session_state:
+    st.session_state.doc_type = ""  # 문제/해설
 if 'latex_code' not in st.session_state:
     st.session_state.latex_code = ""
 if 'original_image' not in st.session_state:
@@ -112,7 +91,6 @@ drive_folder_id = st.secrets.get("DRIVE_FOLDER_ID", "")
 spreadsheet_id = st.secrets.get("SPREADSHEET_ID", "")
 
 # -------------------- 구글 API 초기화 --------------------
-from google.oauth2 import service_account
 def get_google_service(api_name, api_version, scopes):
     try:
         credentials = service_account.Credentials.from_service_account_info(
@@ -138,7 +116,7 @@ def upload_to_drive(image, filename, folder_id, mime_type="image/jpeg"):
         if service is None:
             return False, "드라이브 서비스가 None임."
         
-        # 혹시 여전히 RGBA일 경우 대비
+        # RGBA -> RGB 변환(방어적)
         if image.mode == 'RGBA':
             image = image.convert('RGB')
         
@@ -164,7 +142,11 @@ def upload_to_drive(image, filename, folder_id, mime_type="image/jpeg"):
         return False, f"이미지 업로드 중 오류: {str(e)}"
 
 # -------------------- 구글 시트 업데이트 --------------------
-def append_to_sheet(spreadsheet_id, student_id, student_name, latex_code, image_id):
+def append_to_sheet(spreadsheet_id, student_id, student_name, doc_type, latex_code, image_id):
+    """
+    시트 컬럼 구성:
+    A: 학번, B: 이름, C: 종류(문제/해설), D: LaTeX, E: 제출시간, F: 이미지 링크
+    """
     try:
         service = get_sheets_service()
         if service is None:
@@ -175,6 +157,7 @@ def append_to_sheet(spreadsheet_id, student_id, student_name, latex_code, image_
         values = [[
             student_id,
             student_name,
+            doc_type,
             latex_code,
             timestamp,
             f"https://drive.google.com/file/d/{image_id}/view"
@@ -182,9 +165,10 @@ def append_to_sheet(spreadsheet_id, student_id, student_name, latex_code, image_
         
         body = {'values': values}
         
+        # A:F 까지
         result = service.spreadsheets().values().append(
             spreadsheetId=spreadsheet_id,
-            range='Sheet1!A:E',
+            range='Sheet1!A:F',
             valueInputOption='RAW',
             insertDataOption='INSERT_ROWS',
             body=body
@@ -198,7 +182,7 @@ def append_to_sheet(spreadsheet_id, student_id, student_name, latex_code, image_
 def extract_latex_from_image(image_data, api_key):
     """
     이미지 속 손글씨 수식을 'o4-mini' 모델로 변환.
-    불필요한 파라미터(max_tokens, temperature 등)는 모두 제거.
+    불필요한 파라미터(max_tokens, temperature 등)는 제거.
     """
     status_box = st.empty()
     
@@ -206,39 +190,32 @@ def extract_latex_from_image(image_data, api_key):
         if not api_key or len(api_key) < 10:
             raise ValueError("유효한 OpenAI API 키가 없습니다. (secrets에 OPENAI_API_KEY 필요)")
         
-        # 이미지가 RGBA면 RGB로 변환
+        # 이미지 전처리
         if image_data.mode == 'RGBA':
             image_data = image_data.convert('RGB')
         
-        # 크기 제한 (1500px 넘으면 축소)
         max_size = 1500
         if image_data.width > max_size or image_data.height > max_size:
             ratio = min(max_size / image_data.width, max_size / image_data.height)
             new_size = (int(image_data.width * ratio), int(image_data.height * ratio))
             image_data = image_data.resize(new_size, Image.LANCZOS)
         
-        # Base64 인코딩
         status_box.info("이미지를 Base64로 인코딩 중...")
         buffered = io.BytesIO()
         image_data.save(buffered, format="PNG")
         img_bytes = buffered.getvalue()
         base64_image = base64.b64encode(img_bytes).decode('utf-8')
         
-        # 모델: o4-mini
         model_to_use = "o4-mini"
-        
-        # system_prompt
         system_prompt = """당신은 수학 손글씨 이미지를 정확한 LaTeX 코드로 변환해주는 전문가입니다.
 - 불필요한 설명 없이, 오직 LaTeX 코드만 출력하세요.
 - $$ ... $$ 또는 \\begin{align*} ... \\end{align*} 등을 활용해 수식을 표현하세요.
 """
         
-        # OpenAI API 호출
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
         }
-        
         payload = {
             "model": model_to_use,
             "messages": [
@@ -272,7 +249,6 @@ def extract_latex_from_image(image_data, api_key):
         if response.status_code != 200:
             return f"[오류] OpenAI API 응답 실패: {response.status_code}, {response.text}"
         
-        # 결과 파싱
         result_json = response.json()
         if "choices" not in result_json or len(result_json["choices"]) == 0:
             return "[오류] OpenAI API 응답에 choices가 없습니다."
@@ -296,53 +272,48 @@ def display_latex_with_rendering(latex_code: str):
     """$$...$$ 구문을 st.markdown()에 넣으면 MathJax로 자동 렌더링됨."""
     st.markdown(latex_code)
 
-# -------------------- (A) 로그인 --------------------
+# ----------------------------------------------------------------------------
+# 1) 로그인 단계
 if not st.session_state.is_logged_in:
     st.title("수학 손글씨 LaTeX 변환기")
     st.subheader("학생 정보 입력 (모든 텍스트 검정)")
     
-    with st.container():
-        st.markdown('<div class="user-info-box">', unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        with c1:
-            st.session_state.student_id = st.text_input("학번", placeholder="예) 20230123")
-        with c2:
-            st.session_state.student_name = st.text_input("이름", placeholder="예) 홍길동")
-        
-        if st.button("시작하기"):
-            if st.session_state.student_id and st.session_state.student_name:
-                st.session_state.is_logged_in = True
-                st.experimental_rerun()
-            else:
-                st.error("학번과 이름을 모두 입력해주세요.")
-        st.markdown('</div>', unsafe_allow_html=True)
+    # 학번, 이름, 종류(문제/해설) 입력
+    st.session_state.student_id = st.text_input("학번", placeholder="예) 20230123")
+    st.session_state.student_name = st.text_input("이름", placeholder="예) 홍길동")
+    st.session_state.doc_type = st.selectbox("종류 선택", ["문제", "해설"])
+    
+    if st.button("시작하기"):
+        if st.session_state.student_id and st.session_state.student_name:
+            st.session_state.is_logged_in = True
+            st.experimental_rerun()
+        else:
+            st.error("학번과 이름을 모두 입력해주세요.")
     
     st.stop()
 
-# -------------------- (B) 로그인 후 메인 화면 --------------------
+# ----------------------------------------------------------------------------
+# 2) 로그인 후 메인 화면
 st.title("수학 손글씨 LaTeX 변환기 (텍스트는 전부 검정)")
 st.markdown(f"""
-<div class="user-info-box">
-    <strong>학번:</strong> {st.session_state.student_id} &nbsp;|&nbsp;
-    <strong>이름:</strong> {st.session_state.student_name}
-</div>
-""", unsafe_allow_html=True)
+**학번:** {st.session_state.student_id}  
+**이름:** {st.session_state.student_name}  
+**종류:** {st.session_state.doc_type}
+""")
 
 # 레이아웃: 왼쪽 = 이미지 업로드, 오른쪽 = 코드 편집 + 렌더링
 left_col, right_col = st.columns(2)
 
 with left_col:
     st.header("1. 손글씨 이미지 업로드")
-    st.markdown('<div class="upload-section">', unsafe_allow_html=True)
     uploaded_file = st.file_uploader("이미지 (JPG/PNG)", type=["jpg", "jpeg", "png"])
-    st.markdown('</div>', unsafe_allow_html=True)
     
     if uploaded_file is not None:
         try:
             image = Image.open(uploaded_file)
             st.write(f"이미지 정보: {image.format}, {image.size}, {image.mode}")
             
-            # RGBA -> RGB 변환 (최종 제출 오류 방지)
+            # RGBA -> RGB 변환 (최종 제출 시 오류 방지)
             if image.mode == 'RGBA':
                 image = image.convert('RGB')
             
@@ -361,8 +332,6 @@ with left_col:
                     st.session_state.processing_complete = True
                     
                     st.success("추출된 LaTeX 코드는 우측 '2. LaTeX 코드 편집'에서 확인/수정하세요.")
-                    
-                    # 변환 후 즉시 리런
                     st.experimental_rerun()
         
         except Exception as ex:
@@ -373,18 +342,14 @@ with left_col:
 
 with right_col:
     st.header("2. LaTeX 코드 편집")
-    st.markdown('<div class="editor-section">', unsafe_allow_html=True)
     
-    # 사용자가 직접 '렌더링 적용' 버튼을 누르기 전까지는 세션 상태를 갱신하지 않음
-    # 임시 변수에 현재 세션의 LaTeX 코드를 표시
+    # 임시 변수에 현재 세션 LaTeX 저장
     temp_latex = st.text_area(
         "LaTeX 코드 (수정 가능)",
         value=st.session_state.latex_code,
         height=300
     )
-    st.markdown('</div>', unsafe_allow_html=True)
     
-    # 렌더링 반영 버튼
     if st.button("렌더링 적용"):
         st.session_state.latex_code = temp_latex
     
@@ -394,7 +359,8 @@ with right_col:
     else:
         st.info("아직 변환된 LaTeX 코드가 없습니다.")
 
-# -------------------- 최종 제출 섹션 --------------------
+# ----------------------------------------------------------------------------
+# 3) 최종 제출 섹션
 if st.session_state.processing_complete and st.session_state.original_image:
     st.markdown("---")
     st.markdown("## 최종 제출")
@@ -408,17 +374,18 @@ if st.session_state.processing_complete and st.session_state.original_image:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"{st.session_state.student_id}_{st.session_state.student_name}_{timestamp}.jpg"
                 
-                # 1) 이미지 업로드
+                # (1) 이미지 업로드
                 success_drive, drive_result = upload_to_drive(
                     st.session_state.original_image, filename, drive_folder_id
                 )
                 
                 if success_drive:
-                    # 2) 시트 기록
+                    # (2) 구글 시트 기록
                     success_sheet, sheet_result = append_to_sheet(
                         spreadsheet_id,
                         st.session_state.student_id,
                         st.session_state.student_name,
+                        st.session_state.doc_type,
                         st.session_state.latex_code,
                         drive_result
                     )
@@ -451,7 +418,8 @@ if st.session_state.processing_complete and st.session_state.original_image:
             st.session_state.error_message = ""
             st.experimental_rerun()
 
-# -------------------- 하단 정보 --------------------
+# ----------------------------------------------------------------------------
+# 하단 정보
 st.markdown("""
 <footer>
     <p>이 앱은 Streamlit + OpenAI API (o4-mini)로 제작되었습니다.</p>
