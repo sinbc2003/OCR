@@ -257,7 +257,7 @@ def extract_latex_from_image(image_data, api_key):
         # Prompt
         system_prompt = """당신은 손글씨로 된 수학 문제와 풀이를 정확한 LaTeX 코드로 변환하는 전문가입니다.
 - 본문 전체를 LaTeX 형식으로 변환하되, 불필요한 설명은 배제합니다.
-- 수식은 $$ ... $$ 로 감싸거나 \\begin{align*} ... \\end{align*} 등을 활용합니다.
+- 수식은 $$ ... $$ 로 감싸서 출력합니다.
 - 문단/수식별로 줄바꿈(\\n)을 적절히 넣어 가독성을 높입니다.
 """
         
