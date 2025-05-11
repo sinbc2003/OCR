@@ -251,7 +251,7 @@ def extract_latex_from_image(image_data, api_key):
         base64_image = base64.b64encode(img_bytes).decode('utf-8')
         
         # 모델 후보 (예시)
-        models_to_try = ["gpt-4o-mini", "o4-mini", "gpt-3.5-turbo"]
+        models_to_try = ["o4-mini"]
         model_to_use = models_to_try[0]
         
         # Prompt
