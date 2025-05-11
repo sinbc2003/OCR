@@ -428,7 +428,7 @@ if st.session_state.processing_complete and st.session_state.original_image:
 # 하단 정보
 st.markdown("""
 <footer>
-    <p>이 앱은 Streamlit + OpenAI API (o4-mini)로 제작되었습니다.</p>
+    <p>제작 : 교사 신병철</p>
     <p>© 2025 수학 손글씨 LaTeX 변환기</p>
 </footer>
 """, unsafe_allow_html=True)
