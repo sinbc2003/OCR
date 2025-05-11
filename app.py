@@ -222,7 +222,7 @@ def extract_latex_from_image(image_data, api_key):
         model_to_use = "o4-mini"
         system_prompt = """당신은 수학 손글씨 이미지를 정확한 LaTeX 코드로 변환해주는 전문가입니다.
 - 불필요한 설명 없이, 오직 LaTeX 코드만 출력하세요.
-- mathjax로 렌더링이 되도록 수식은 $$로 감싸서 표현하세요. 텍스트는 그대로 출력하고, 수식은 달러 구분자 방식을 사용한 Math Mode를 사용하세요.
+- mathjax로 렌더링이 되도록 수식은 $$로 감싸서 표현하세요. 텍스트는 그대로 출력하고, 수식은 달러 구분자 방식을 사용한 Math Mode를 사용하세요. 즉, 디스플레이 모드로 출력하시오.
 """
         
         headers = {
