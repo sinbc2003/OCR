@@ -21,24 +21,25 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------------------------------
-# CSS: 배경 = 흰색, 텍스트 = 검정색, 버튼 = 파란색
+# CSS: 배경 = 흰색, 텍스트 기본 검정. 단, selectbox 내용(#9CA3AF)로 지정
+# placeholder "예) 홍길동"도 보통 Streamlit이 회색(#9CA3AF 근처) 처리
 st.markdown(
     """
     <style>
-    /* 전체 배경 흰색 + 글자 검정 */
+    /* 전체 배경 흰색 */
     body, .stApp, .block-container {
         background-color: #ffffff !important;
         color: #000000 !important;
     }
-    /* 모든 텍스트(제목, 라벨, 본문) 검정 */
+    /* 기본 텍스트: 검정.
+       하지만 selectbox 항목은 placeholder색(#9CA3AF)로 표시 */
     h1, h2, h3, h4, h5, h6, strong, p, div, label {
         color: #000000 !important;
     }
-    /* 알림박스도 검정 글자 */
     .stAlert p {
         color: #000000 !important;
     }
-    /* 버튼 파란색 배경 + 흰색 텍스트 */
+    /* 버튼: 파란색 배경 + 흰 텍스트 */
     .stButton>button {
         background-color: #2563EB !important;
         color: #ffffff !important;
@@ -59,6 +60,15 @@ st.markdown(
         color: #000000;
         font-size: 0.875rem;
     }
+
+    /* selectbox(드롭다운) 내부 텍스트 색상 = #9CA3AF(회색) */
+    .stSelectbox div[data-baseweb="select"] * {
+        color: #9CA3AF !important;
+    }
+    /* 혹시 옵션 부분도 별도 스타일이 있다면 추가 */
+    .stSelectbox .css-1c9b0pz-option {
+        color: #9CA3AF !important;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -73,7 +83,7 @@ if 'student_id' not in st.session_state:
 if 'student_name' not in st.session_state:
     st.session_state.student_name = ""
 if 'doc_type' not in st.session_state:
-    st.session_state.doc_type = ""  # 문제/해설
+    st.session_state.doc_type = ""  # 문제 / 해설
 if 'latex_code' not in st.session_state:
     st.session_state.latex_code = ""
 if 'original_image' not in st.session_state:
@@ -91,6 +101,7 @@ drive_folder_id = st.secrets.get("DRIVE_FOLDER_ID", "")
 spreadsheet_id = st.secrets.get("SPREADSHEET_ID", "")
 
 # -------------------- 구글 API 초기화 --------------------
+from google.oauth2 import service_account
 def get_google_service(api_name, api_version, scopes):
     try:
         credentials = service_account.Credentials.from_service_account_info(
@@ -165,7 +176,6 @@ def append_to_sheet(spreadsheet_id, student_id, student_name, doc_type, latex_co
         
         body = {'values': values}
         
-        # A:F 까지
         result = service.spreadsheets().values().append(
             spreadsheetId=spreadsheet_id,
             range='Sheet1!A:F',
@@ -182,7 +192,7 @@ def append_to_sheet(spreadsheet_id, student_id, student_name, doc_type, latex_co
 def extract_latex_from_image(image_data, api_key):
     """
     이미지 속 손글씨 수식을 'o4-mini' 모델로 변환.
-    불필요한 파라미터(max_tokens, temperature 등)는 제거.
+    불필요한 파라미터(max_tokens 등)는 제거.
     """
     status_box = st.empty()
     
@@ -276,9 +286,8 @@ def display_latex_with_rendering(latex_code: str):
 # 1) 로그인 단계
 if not st.session_state.is_logged_in:
     st.title("수학 손글씨 LaTeX 변환기")
-    st.subheader("학생 정보 입력 (모든 텍스트 검정)")
+    st.subheader("학생 정보 입력")
     
-    # 학번, 이름, 종류(문제/해설) 입력
     st.session_state.student_id = st.text_input("학번", placeholder="예) 20230123")
     st.session_state.student_name = st.text_input("이름", placeholder="예) 홍길동")
     st.session_state.doc_type = st.selectbox("종류 선택", ["문제", "해설"])
@@ -294,14 +303,14 @@ if not st.session_state.is_logged_in:
 
 # ----------------------------------------------------------------------------
 # 2) 로그인 후 메인 화면
-st.title("수학 손글씨 LaTeX 변환기 (텍스트는 전부 검정)")
+st.title("수학 손글씨 LaTeX 변환기")
 st.markdown(f"""
 **학번:** {st.session_state.student_id}  
 **이름:** {st.session_state.student_name}  
 **종류:** {st.session_state.doc_type}
 """)
 
-# 레이아웃: 왼쪽 = 이미지 업로드, 오른쪽 = 코드 편집 + 렌더링
+# 레이아웃: 왼쪽(이미지 업로드), 오른쪽(코드 편집 + 렌더링)
 left_col, right_col = st.columns(2)
 
 with left_col:
@@ -313,7 +322,7 @@ with left_col:
             image = Image.open(uploaded_file)
             st.write(f"이미지 정보: {image.format}, {image.size}, {image.mode}")
             
-            # RGBA -> RGB 변환 (최종 제출 시 오류 방지)
+            # RGBA -> RGB 변환
             if image.mode == 'RGBA':
                 image = image.convert('RGB')
             
@@ -327,11 +336,9 @@ with left_col:
                     with st.spinner("이미지 분석 및 LaTeX 변환 중..."):
                         latex_result = extract_latex_from_image(image, api_key)
                     
-                    # 추출 결과 세션에 저장
                     st.session_state.latex_code = latex_result
                     st.session_state.processing_complete = True
-                    
-                    st.success("추출된 LaTeX 코드는 우측 '2. LaTeX 코드 편집'에서 확인/수정하세요.")
+                    st.success("추출된 LaTeX 코드는 우측에서 확인/수정하세요.")
                     st.experimental_rerun()
         
         except Exception as ex:
@@ -343,7 +350,6 @@ with left_col:
 with right_col:
     st.header("2. LaTeX 코드 편집")
     
-    # 임시 변수에 현재 세션 LaTeX 저장
     temp_latex = st.text_area(
         "LaTeX 코드 (수정 가능)",
         value=st.session_state.latex_code,
@@ -374,13 +380,13 @@ if st.session_state.processing_complete and st.session_state.original_image:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"{st.session_state.student_id}_{st.session_state.student_name}_{timestamp}.jpg"
                 
-                # (1) 이미지 업로드
+                # 1) 이미지 업로드
                 success_drive, drive_result = upload_to_drive(
                     st.session_state.original_image, filename, drive_folder_id
                 )
                 
                 if success_drive:
-                    # (2) 구글 시트 기록
+                    # 2) 구글 시트 기록
                     success_sheet, sheet_result = append_to_sheet(
                         spreadsheet_id,
                         st.session_state.student_id,
