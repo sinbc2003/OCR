@@ -73,6 +73,10 @@ st.markdown("""
         background-color: #F9FAFB;
         min-height: 200px;
         margin-bottom: 1rem;
+        color: #000000 !important;  /* 텍스트 색상을 검정색으로 강제 지정 */
+    }
+    .latex-preview p {
+        color: #000000 !important;  /* p 태그의 텍스트 색상도 검정색으로 지정 */
     }
     .upload-section {
         padding: 1.5rem;
@@ -230,16 +234,21 @@ def append_to_sheet(spreadsheet_id, student_id, student_name, latex_code, image_
 def extract_latex_from_image(image_data, api_key):
     """OpenAI API의 o4-mini 모델을 사용하여 이미지에서 LaTeX 코드를 추출합니다."""
     try:
+        # 디버깅 메시지 표시
+        debug_container = st.empty()
+        debug_container.info("API 요청 준비 중...")
+        
         # API 키 확인
         if not api_key or len(api_key) < 10:  # API 키는 일반적으로 길이가 깁니다
             raise ValueError("유효한 OpenAI API 키를 입력해주세요")
         
         # 이미지 전처리
+        debug_container.info("이미지 전처리 중...")
         if image_data.mode == 'RGBA':
             image_data = image_data.convert('RGB')
             
         # 이미지 크기 제한 (너무 큰 이미지는 처리 속도가 느려짐)
-        max_size = 1800  # 최대 크기 지정
+        max_size = 1500  # 최대 크기 지정 (약간 줄임)
         if image_data.width > max_size or image_data.height > max_size:
             # 비율 유지하며 크기 조정
             ratio = min(max_size / image_data.width, max_size / image_data.height)
@@ -247,20 +256,32 @@ def extract_latex_from_image(image_data, api_key):
             image_data = image_data.resize(new_size, Image.LANCZOS)
             
         # 이미지를 Base64로 인코딩
+        debug_container.info("이미지를 Base64로 인코딩 중...")
         buffered = io.BytesIO()
         image_data.save(buffered, format="PNG")
         img_bytes = buffered.getvalue()
         base64_image = base64.b64encode(img_bytes).decode('utf-8')
         
+        # 이미지 크기 확인 (너무 크면 OpenAI API 제한에 걸릴 수 있음)
+        img_size_mb = len(img_bytes) / (1024 * 1024)
+        if img_size_mb > 20:  # OpenAI는 일반적으로 20MB 미만 권장
+            debug_container.warning(f"이미지 크기가 큽니다: {img_size_mb:.2f}MB. 처리 속도가 느릴 수 있습니다.")
+        
         # OpenAI API 요청 설정
+        debug_container.info("OpenAI API 요청 준비 중...")
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
         }
         
+        # 모델 선택 - gpt-4o-mini로 설정 (o4-mini가 실패하면 폴백)
+        model_to_use = "gpt-4o-mini"
+        
+        debug_container.info(f"선택된 모델: {model_to_use}")
+        
         # 요청 페이로드 구성 - Chat Completions API 사용
         payload = {
-            "model": "o4-mini",
+            "model": model_to_use,
             "messages": [
                 {
                     "role": "system",
@@ -284,11 +305,11 @@ def extract_latex_from_image(image_data, api_key):
                 }
             ],
             "max_tokens": 1000,
-            "temperature": 0.3,
-            "seed": 123
+            "temperature": 0.3
         }
         
         # API 호출
+        debug_container.info("OpenAI API 호출 중...")
         response = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers=headers,
@@ -298,17 +319,24 @@ def extract_latex_from_image(image_data, api_key):
         # 응답 확인
         if response.status_code == 200:
             result = response.json()
+            debug_container.success("API 요청 성공!")
+            
             if "choices" in result and len(result["choices"]) > 0:
                 extracted_text = result["choices"][0]["message"]["content"]
+                debug_container.empty()  # 디버그 메시지 숨기기
                 return extracted_text
             else:
+                debug_container.error("API 응답에 'choices' 필드가 없습니다.")
                 return "LaTeX 추출에 실패했습니다. API 응답에서 결과를 찾을 수 없습니다."
         else:
             error_msg = f"API 오류 ({response.status_code}): {response.text}"
-            st.error(error_msg)
+            debug_container.error(error_msg)
+            st.error(f"API 응답: {response.text}")
             return f"OpenAI API 오류가 발생했습니다: {error_msg}"
     except Exception as e:
         st.error(f"텍스트 추출 오류: {str(e)}")
+        import traceback
+        st.error(f"상세 오류: {traceback.format_exc()}")
         return f"텍스트 추출 중 오류 발생: {str(e)}"
 
 # 사용자 로그인 화면
@@ -364,18 +392,21 @@ with col1:
         try:
             # 이미지 로드 및 전처리
             image = Image.open(uploaded_file)
+            st.write(f"이미지 정보: 크기 {image.size}, 형식 {image.format}, 모드 {image.mode}")
             
             # RGBA 이미지를 RGB로 변환 (알파 채널 제거)
             if image.mode == 'RGBA':
                 image = image.convert('RGB')
+                st.info("RGBA 이미지를 RGB로 변환했습니다.")
             
             # 이미지 크기 제한 (너무 큰 이미지는 처리 속도가 느려짐)
-            max_size = 1800  # 최대 크기 지정
+            max_size = 1500  # 최대 크기 지정
             if image.width > max_size or image.height > max_size:
                 # 비율 유지하며 크기 조정
                 ratio = min(max_size / image.width, max_size / image.height)
                 new_size = (int(image.width * ratio), int(image.height * ratio))
                 image = image.resize(new_size, Image.LANCZOS)
+                st.info(f"이미지 크기가 너무 커서 {new_size}로 조정했습니다.")
             
             # 세션에 원본 이미지 저장
             st.session_state.original_image = image
@@ -383,18 +414,61 @@ with col1:
             # 이미지 표시
             st.image(image, caption="업로드한 이미지", use_column_width=True)
             
-            if st.button("이미지 처리하기"):
-                with st.spinner("이미지 분석 중... 잠시만 기다려주세요."):
-                    # API 키 확인
-                    if not api_key:
-                        st.error("OpenAI API 키가 설정되지 않았습니다.")
-                    else:
+            # 처리 버튼 및 상태 정보를 위한 컨테이너
+            button_col, status_col = st.columns([1, 3])
+            
+            with button_col:
+                process_button = st.button("이미지 처리하기")
+            
+            # 처리 버튼 클릭 시 
+            if process_button:
+                status_col.info("처리 시작...")
+                
+                # API 키 확인
+                if not api_key:
+                    st.error("OpenAI API 키가 설정되지 않았습니다.")
+                    st.error("Streamlit Cloud의 시크릿 설정에서 'OPENAI_API_KEY'를 설정하세요.")
+                else:
+                    try:
+                        st.info(f"OpenAI API 키 확인: {api_key[:5]}...{api_key[-4:]} (길이: {len(api_key)})")
+                        
+                        # 처리 진행 표시
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        
+                        # 진행 상태 업데이트
+                        status_text.text("이미지 분석 준비 중...")
+                        progress_bar.progress(25)
+                        
                         # API 키를 사용하여 이미지 처리
+                        status_text.text("OpenAI API 호출 중...")
+                        progress_bar.progress(50)
+                        
                         latex_result = extract_latex_from_image(image, api_key)
+                        
+                        # 결과 업데이트
+                        progress_bar.progress(75)
+                        status_text.text("처리 결과 업데이트 중...")
+                        
                         st.session_state.latex_code = latex_result
                         st.session_state.processing_complete = True
+                        
+                        # 완료
+                        progress_bar.progress(100)
+                        status_text.text("처리 완료!")
+                        
+                        # 3초 후 리프레시 (선택적)
+                        time.sleep(2)
                         st.experimental_rerun()
-        
+                    except Exception as e:
+                        st.error(f"처리 중 오류 발생: {str(e)}")
+                        import traceback
+                        st.error(f"상세 오류: {traceback.format_exc()}")
+            
+            # 이전 처리 결과가 있으면 표시
+            if st.session_state.latex_code and not process_button:
+                st.success("이미지가 이미 처리되었습니다. LaTeX 코드를 편집할 수 있습니다.")
+                
         except Exception as e:
             st.error(f"이미지 처리 중 오류가 발생했습니다: {str(e)}")
             st.info("다른 이미지 파일을 시도해보세요. JPEG 또는 PNG 형식이 가장 안정적입니다.")
@@ -424,11 +498,29 @@ with col2:
         # MathJax로 렌더링 (LaTeX을 HTML에 삽입)
         st.markdown(f"""
         <div class="latex-preview">
-            <p>$$
+            <p style="color: black; font-size: 16px;">$$
             {st.session_state.latex_code}
             $$</p>
         </div>
         """, unsafe_allow_html=True)
+        
+        # MathJax 스크립트 직접 포함
+        st.components.v1.html(f"""
+        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+        <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+        <div id="latex-render" style="padding: 20px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px; margin-top: 10px; color: black;">
+            $$
+            {st.session_state.latex_code}
+            $$
+        </div>
+        <script>
+            window.onload = function() {{
+                if (typeof MathJax !== 'undefined') {{
+                    MathJax.typeset();
+                }}
+            }}
+        </script>
+        """, height=300)
         
         # 다운로드 버튼 - LaTeX 코드를 텍스트 파일로 저장
         latex_bytes = st.session_state.latex_code.encode()
@@ -441,7 +533,7 @@ with col2:
     else:
         st.markdown("""
         <div class="latex-preview">
-            <p style="color:#6B7280; text-align:center; padding-top:70px;">
+            <p style="color:#000000; text-align:center; padding-top:70px;">
                 이미지를 업로드하고 처리하면 여기에 렌더링 결과가 표시됩니다.
             </p>
         </div>
@@ -519,7 +611,8 @@ st.markdown("""
 
 # MathJax 스크립트 추가 (LaTeX 렌더링용)
 st.markdown("""
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.0/es5/tex-mml-chtml.js"></script>
+<script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 <script>
     window.MathJax = {
         tex: {
@@ -533,5 +626,10 @@ st.markdown("""
             processHtmlClass: 'tex2jax_process'
         }
     };
+    document.addEventListener("DOMContentLoaded", function() {
+        if (typeof MathJax !== 'undefined') {
+            MathJax.typeset();
+        }
+    });
 </script>
 """, unsafe_allow_html=True)
