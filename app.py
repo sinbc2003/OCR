@@ -6,6 +6,7 @@ import io
 import requests
 import time
 import json
+import traceback
 from streamlit_ace import st_ace
 from datetime import datetime
 import pandas as pd
@@ -20,7 +21,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# 앱 스타일 적용
+# CSS 스타일 수정 (앱 스타일 섹션)
 st.markdown("""
 <style>
     .main {
@@ -79,15 +80,19 @@ st.markdown("""
         color: #000000 !important;  /* p 태그의 텍스트 색상도 검정색으로 지정 */
     }
     .rendered-latex-container {
-        background-color: #f8f9fa;
+        background-color: #ffffff;
         border: 1px solid #ddd;
         border-radius: 5px;
         padding: 15px;
         margin: 10px 0;
         overflow: auto;
+        max-height: 400px;
     }
     .latex-line {
         margin: 5px 0;
+    }
+    .latex-line p {
+        color: #000000 !important;
     }
     .upload-section {
         padding: 1.5rem;
@@ -101,6 +106,7 @@ st.markdown("""
         border: 1px solid #E5E7EB;
         border-radius: 0.375rem;
         margin-bottom: 1.5rem;
+        background-color: #FFFFFF;
     }
     .css-1fcdlhc {
         padding-top: 0.5rem !important;
@@ -123,48 +129,30 @@ st.markdown("""
         color: #6B7280;
         font-size: 0.875rem;
     }
+    /* 추가 스타일 */
+    .render-box {
+        margin-top: 1.5rem;
+        margin-bottom: 2rem;
+        padding: 1rem;
+        background-color: white;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+    }
+    .render-title {
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    /* 편집기 활성화 표시 */
+    .editor-active {
+        border: 2px solid #3B82F6;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # 제목
 st.title("수학 손글씨 LaTeX 변환기")
 st.markdown("손으로 작성한 수학 문제를 업로드하여 LaTeX 코드로 변환하고 실시간으로 렌더링해보세요.")
-
-# LaTeX 사용 가이드 컴포넌트
-def show_latex_guide():
-    """LaTeX 편집에 대한 도움말을 제공하는 확장 가능한 가이드를 표시합니다."""
-    with st.expander("LaTeX 편집 도움말", expanded=False):
-        st.markdown("""
-        ### LaTeX 편집 가이드
-        
-        수식 변환 결과가 완벽하지 않을 경우, 아래 가이드를 참고하여 수정할 수 있습니다:
-        
-        #### 자주 사용되는 LaTeX 명령어
-        
-        | 표현 | LaTeX 코드 | 설명 |
-        |------|------------|------|
-        | 분수 | `\\frac{분자}{분모}` | 분수 표현 |
-        | 제곱 | `x^2` | 위첨자(제곱) |
-        | 아래첨자 | `x_1` | 아래첨자 |
-        | 루트 | `\\sqrt{x}` | 제곱근 |
-        | n제곱근 | `\\sqrt[n]{x}` | n제곱근 |
-        | 괄호 | `\\left( ... \\right)` | 자동 크기 조절 괄호 |
-        | 일반 텍스트 | `\\text{텍스트}` | 수식 내 일반 텍스트 |
-        | 로그 | `\\log_{b}(x)` | 밑이 b인 로그 |
-        | 특수 기호 | `\\alpha`, `\\beta`, `\\theta` | 그리스 문자 |
-        | 무한대 | `\\infty` | 무한대 기호 |
-        
-        #### 줄바꿈 및 정렬
-        
-        * 새 줄 시작: 줄 끝에 `\\\\`를 추가합니다.
-        * 문단 구분: 빈 줄을 두 개 넣습니다.
-        
-        #### 일반적인 오류 수정
-        
-        * 괄호 짝이 맞지 않는 경우: 모든 괄호와 중괄호가 짝을 이루는지 확인하세요.
-        * 특수 문자 앞에는 백슬래시를 넣어야 합니다: `$, %, #, &, _` 등 문자 앞에는 `\\`를 붙여야 합니다.
-        * 렌더링이 되지 않는 경우: 추가 백슬래시를 제거하거나 괄호 짝을 확인하세요.
-        """)
 
 # 개선된 렌더링 섹션
 def display_latex_with_rendering(latex_code):
@@ -188,7 +176,7 @@ def display_latex_with_rendering(latex_code):
         processed_lines.append(processed_line)
     
     # 처리된 각 줄을 별도의 수식으로 표시 (줄바꿈 유지)
-    st.markdown('<div class="rendered-latex-container">', unsafe_allow_html=True)
+    st.markdown('<div class="rendered-latex-container" style="background-color: #ffffff; color: #000000;">', unsafe_allow_html=True)
     
     for i, line in enumerate(processed_lines):
         # 각 줄을 별도의 수식으로 렌더링
@@ -199,24 +187,6 @@ def display_latex_with_rendering(latex_code):
         """, unsafe_allow_html=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
-    
-    # 추가적인 HTML 컴포넌트를 통한 MathJax 렌더링
-    formatted_latex = "<br>".join([f"$${line}$$" for line in processed_lines])
-    
-    st.components.v1.html(f"""
-    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <div id="latex-render" style="padding: 20px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px; margin-top: 10px; color: black; overflow: auto; max-height: 500px;">
-        {formatted_latex}
-    </div>
-    <script>
-        window.onload = function() {{
-            if (typeof MathJax !== 'undefined') {{
-                MathJax.typeset();
-            }}
-        }}
-    </script>
-    """, height=500)  # 높이를 늘려 내용이 잘리지 않도록 함
 
 # 세션 상태 초기화
 if 'is_logged_in' not in st.session_state:
@@ -543,14 +513,13 @@ with col1:
             st.image(image, caption="업로드한 이미지", use_column_width=True)
             
             # 처리 버튼 및 상태 정보를 위한 컨테이너
-            button_col, status_col = st.columns([1, 3])
+            process_button = st.button("이미지 처리하기", key="process_button")
             
-            with button_col:
-                process_button = st.button("이미지 처리하기")
+            status_container = st.empty()
             
             # 처리 버튼 클릭 시 
             if process_button:
-                status_col.info("처리 시작...")
+                status_container.info("처리 시작...")
                 
                 # API 키 확인
                 if not api_key:
@@ -558,44 +527,44 @@ with col1:
                     st.error("Streamlit Cloud의 시크릿 설정에서 'OPENAI_API_KEY'를 설정하세요.")
                 else:
                     try:
-                        st.info(f"OpenAI API 키 확인: {api_key[:5]}...{api_key[-4:]} (길이: {len(api_key)})")
-                        
-                        # 처리 진행 표시
+                        # 진행 표시
                         progress_bar = st.progress(0)
                         status_text = st.empty()
                         
-                        # 진행 상태 업데이트
                         status_text.text("이미지 분석 준비 중...")
                         progress_bar.progress(25)
                         
-                        # API 키를 사용하여 이미지 처리
                         status_text.text("OpenAI API 호출 중...")
                         progress_bar.progress(50)
                         
+                        # 이미지 처리 및 LaTeX 추출
                         latex_result = extract_latex_from_image(image, api_key)
                         
                         # 결과 업데이트
                         progress_bar.progress(75)
                         status_text.text("처리 결과 업데이트 중...")
                         
+                        # 중요: 세션 상태에 결과 저장
                         st.session_state.latex_code = latex_result
                         st.session_state.processing_complete = True
                         
                         # 완료
                         progress_bar.progress(100)
                         status_text.text("처리 완료!")
+                        status_container.success("이미지 처리가 완료되었습니다! 오른쪽에서 LaTeX 코드를 확인하고 필요한 경우 편집하세요.")
                         
-                        # 3초 후 리프레시 (선택적)
-                        time.sleep(2)
+                        # 리프레시 없이 직접 결과 표시
+                        # LaTeX 편집기에 결과 표시를 위해 rerun 사용
+                        time.sleep(1)
                         st.experimental_rerun()
+                        
                     except Exception as e:
-                        st.error(f"처리 중 오류 발생: {str(e)}")
-                        import traceback
+                        status_container.error(f"처리 중 오류 발생: {str(e)}")
                         st.error(f"상세 오류: {traceback.format_exc()}")
             
             # 이전 처리 결과가 있으면 표시
-            if st.session_state.latex_code and not process_button:
-                st.success("이미지가 이미 처리되었습니다. LaTeX 코드를 편집할 수 있습니다.")
+            elif st.session_state.latex_code:
+                status_container.success("이미지가 이미 처리되었습니다. 오른쪽에서 LaTeX 코드를 편집할 수 있습니다.")
                 
         except Exception as e:
             st.error(f"이미지 처리 중 오류가 발생했습니다: {str(e)}")
@@ -604,35 +573,73 @@ with col1:
 with col2:
     st.header("2. LaTeX 코드 편집")
     
-    # LaTeX 사용 가이드 표시
-    show_latex_guide()
-    
     # LaTeX 코드 에디터
     st.markdown('<div class="editor-section">', unsafe_allow_html=True)
+    
+    # 라텍스 값이 없으면 placeholder 설정, 있으면 해당 값 표시
+    editor_value = st.session_state.latex_code if st.session_state.latex_code else ""
+    
     new_latex_code = st_ace(
-        value=st.session_state.latex_code,
+        value=editor_value,
         language="latex",
         theme="github",
         placeholder="LaTeX 코드가 여기에 표시됩니다. 필요한 경우 직접 편집할 수 있습니다.",
-        height=300,  # 높이 증가
+        height=300,
         key="latex_editor"
     )
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # 적용 버튼 추가
-    if st.button("렌더링 적용", key="apply_rendering"):
+    # LaTeX 사용 가이드 표시 (접을 수 있는 형태로)
+    with st.expander("LaTeX 편집 도움말", expanded=False):
+        st.markdown("""
+        ### LaTeX 편집 가이드
+        
+        수식 변환 결과가 완벽하지 않을 경우, 아래 가이드를 참고하여 수정할 수 있습니다:
+        
+        #### 자주 사용되는 LaTeX 명령어
+        
+        | 표현 | LaTeX 코드 | 설명 |
+        |------|------------|------|
+        | 분수 | `\\frac{분자}{분모}` | 분수 표현 |
+        | 제곱 | `x^2` | 위첨자(제곱) |
+        | 아래첨자 | `x_1` | 아래첨자 |
+        | 루트 | `\\sqrt{x}` | 제곱근 |
+        | n제곱근 | `\\sqrt[n]{x}` | n제곱근 |
+        | 괄호 | `\\left( ... \\right)` | 자동 크기 조절 괄호 |
+        | 일반 텍스트 | `\\text{텍스트}` | 수식 내 일반 텍스트 |
+        | 로그 | `\\log_{b}(x)` | 밑이 b인 로그 |
+        | 특수 기호 | `\\alpha`, `\\beta`, `\\theta` | 그리스 문자 |
+        | 무한대 | `\\infty` | 무한대 기호 |
+        
+        #### 줄바꿈 및 정렬
+        
+        * 새 줄 시작: 줄 끝에 `\\\\`를 추가합니다.
+        * 문단 구분: 빈 줄을 두 개 넣습니다.
+        
+        #### 일반적인 오류 수정
+        
+        * 괄호 짝이 맞지 않는 경우: 모든 괄호와 중괄호가 짝을 이루는지 확인하세요.
+        * 특수 문자 앞에는 백슬래시를 넣어야 합니다: `$, %, #, &, _` 등 문자 앞에는 `\\`를 붙여야 합니다.
+        * 렌더링이 되지 않는 경우: 추가 백슬래시를 제거하거나 괄호 짝을 확인하세요.
+        """)
+    
+    # 편집 코드 적용 버튼
+    apply_button_container = st.container()
+    
+    # 사용자가 코드를 변경했으면 세션 상태 업데이트
+    if new_latex_code != st.session_state.latex_code:
         st.session_state.latex_code = new_latex_code
+        
+    # 렌더링 적용 버튼
+    if apply_button_container.button("렌더링 적용", key="apply_rendering"):
         st.success("LaTeX 코드가 업데이트되었습니다. 아래에서 결과를 확인하세요.")
-    
-    # 사용자가 코드를 변경했으면 세션 상태 자동 업데이트도 유지
-    elif new_latex_code != st.session_state.latex_code:
         st.session_state.latex_code = new_latex_code
-        st.info("코드가 변경되었습니다. '렌더링 적용' 버튼을 클릭하여 결과를 확인하세요.")
     
+    # 렌더링 결과를 앞쪽으로 이동
     st.header("3. 렌더링 결과")
     
     if st.session_state.latex_code:
-        # 개선된 렌더링 함수 호출
+        # 개선된 렌더링 표시
         display_latex_with_rendering(st.session_state.latex_code)
         
         # 다운로드 버튼 - LaTeX 코드를 텍스트 파일로 저장
@@ -720,29 +727,4 @@ st.markdown("""
     <p>이 앱은 Streamlit과 OpenAI API를 사용하여 제작되었습니다.</p>
     <p>© 2025 수학 손글씨 LaTeX 변환기</p>
 </footer>
-""", unsafe_allow_html=True)
-
-# MathJax 스크립트 추가 (LaTeX 렌더링용)
-st.markdown("""
-<script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-<script>
-    window.MathJax = {
-        tex: {
-            inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
-            displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
-            processEscapes: true,
-            processEnvironments: true
-        },
-        options: {
-            ignoreHtmlClass: 'tex2jax_ignore',
-            processHtmlClass: 'tex2jax_process'
-        }
-    };
-    document.addEventListener("DOMContentLoaded", function() {
-        if (typeof MathJax !== 'undefined') {
-            MathJax.typeset();
-        }
-    });
-</script>
 """, unsafe_allow_html=True)
