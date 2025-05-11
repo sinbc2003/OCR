@@ -147,6 +147,11 @@ st.markdown("""
         border: 2px solid #3B82F6;
         box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
     }
+    /* Ace 에디터 배경 & 글자색 지정 */
+    .ace_editor, .ace_content {
+        background: #ffffff !important;
+        color: #000000 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -342,7 +347,7 @@ def extract_latex_from_image(image_data, api_key):
             "Authorization": f"Bearer {api_key}"
         }
         
-        # 모델 선택 - o4-mini 먼저 시도, 실패시 gpt-4o-mini로 폴백
+        # 모델 선택 - o4-mini 모델을 가정, 혹은 gpt-4o-mini 등
         models_to_try = ["gpt-4o-mini", "o4-mini"]
         model_to_use = models_to_try[0]
         
@@ -433,7 +438,6 @@ def extract_latex_from_image(image_data, api_key):
             return f"OpenAI API 오류가 발생했습니다: {error_msg}"
     except Exception as e:
         st.error(f"텍스트 추출 오류: {str(e)}")
-        import traceback
         st.error(f"상세 오류: {traceback.format_exc()}")
         return f"텍스트 추출 중 오류 발생: {str(e)}"
 
@@ -544,7 +548,7 @@ with col1:
                         progress_bar.progress(75)
                         status_text.text("처리 결과 업데이트 중...")
                         
-                        # 중요: 세션 상태에 결과 저장
+                        # 중요: 세션 상태에 결과 저장 → 2번 에디터에서 바로 확인 가능!
                         st.session_state.latex_code = latex_result
                         st.session_state.processing_complete = True
                         
@@ -553,8 +557,7 @@ with col1:
                         status_text.text("처리 완료!")
                         status_container.success("이미지 처리가 완료되었습니다! 오른쪽에서 LaTeX 코드를 확인하고 필요한 경우 편집하세요.")
                         
-                        # 리프레시 없이 직접 결과 표시
-                        # LaTeX 편집기에 결과 표시를 위해 rerun 사용
+                        # 잠시 후 재실행(화면 갱신)
                         time.sleep(1)
                         st.experimental_rerun()
                         
@@ -598,18 +601,18 @@ with col2:
         
         #### 자주 사용되는 LaTeX 명령어
         
-        | 표현 | LaTeX 코드 | 설명 |
-        |------|------------|------|
-        | 분수 | `\\frac{분자}{분모}` | 분수 표현 |
-        | 제곱 | `x^2` | 위첨자(제곱) |
-        | 아래첨자 | `x_1` | 아래첨자 |
-        | 루트 | `\\sqrt{x}` | 제곱근 |
-        | n제곱근 | `\\sqrt[n]{x}` | n제곱근 |
-        | 괄호 | `\\left( ... \\right)` | 자동 크기 조절 괄호 |
-        | 일반 텍스트 | `\\text{텍스트}` | 수식 내 일반 텍스트 |
-        | 로그 | `\\log_{b}(x)` | 밑이 b인 로그 |
-        | 특수 기호 | `\\alpha`, `\\beta`, `\\theta` | 그리스 문자 |
-        | 무한대 | `\\infty` | 무한대 기호 |
+        | 표현       | LaTeX 코드              | 설명              |
+        |------------|-------------------------|-------------------|
+        | 분수       | `\\frac{분자}{분모}`     | 분수 표현         |
+        | 제곱       | `x^2`                  | 위첨자(제곱)       |
+        | 아래첨자    | `x_1`                  | 아래첨자          |
+        | 루트       | `\\sqrt{x}`             | 제곱근            |
+        | n제곱근    | `\\sqrt[n]{x}`          | n제곱근           |
+        | 괄호       | `\\left( ... \\right)`  | 자동 크기 괄호    |
+        | 일반 텍스트 | `\\text{텍스트}`         | 수식 내 텍스트     |
+        | 로그       | `\\log_{b}(x)`          | 밑이 b인 로그      |
+        | 특수 기호   | `\\alpha`, `\\beta` 등   | 그리스 문자       |
+        | 무한대     | `\\infty`              | 무한대 기호        |
         
         #### 줄바꿈 및 정렬
         
@@ -635,7 +638,7 @@ with col2:
         st.success("LaTeX 코드가 업데이트되었습니다. 아래에서 결과를 확인하세요.")
         st.session_state.latex_code = new_latex_code
     
-    # 렌더링 결과를 앞쪽으로 이동
+    # 렌더링 결과
     st.header("3. 렌더링 결과")
     
     if st.session_state.latex_code:
