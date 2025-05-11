@@ -247,7 +247,6 @@ drive_folder_id = st.secrets.get("DRIVE_FOLDER_ID", "")
 spreadsheet_id = st.secrets.get("SPREADSHEET_ID", "")
 
 # 구글 API 인증 및 서비스 설정
-from google.oauth2 import service_account
 def get_google_service(api_name, api_version, scopes):
     try:
         credentials = service_account.Credentials.from_service_account_info(
@@ -376,7 +375,7 @@ def extract_latex_from_image(image_data, api_key):
         }
         
         # 원하는 모델 시도
-        models_to_try = ["gpt-4o-mini", "o4-mini", "gpt-3.5-turbo"]  # 필요 시 추가
+        models_to_try = ["gpt-4o-mini", "o4-mini", "gpt-3.5-turbo"]  # 예시 모델 이름들
         model_to_use = models_to_try[0]
         
         debug_container.info(f"선택된 모델: {model_to_use}")
@@ -432,7 +431,6 @@ def extract_latex_from_image(image_data, api_key):
                 json=payload
             )
             
-            # 그래도 안되면 3번째 모델도 시도 가능...
             if response.status_code != 200 and len(models_to_try) > 2:
                 debug_container.warning(f"{model_to_use} 모델도 실패. {models_to_try[2]} 모델로 재시도.")
                 model_to_use = models_to_try[2]
@@ -588,10 +586,10 @@ with col2:
     st.header("2. LaTeX 코드 편집")
     st.markdown('<div class="editor-section">', unsafe_allow_html=True)
     
-    # 여기를 수정: session_state.latex_code가 이미 설정되어 있는지 확인
+    # 세션에 저장된 LaTeX 코드 불러오기
     editor_value = st.session_state.latex_code
     
-    # theme="chrome"로 강제 라이트 테마
+    # theme="chrome"로 설정하여 라이트 테마
     new_latex_code = st_ace(
         value=editor_value,
         language="latex",
@@ -621,11 +619,11 @@ with col2:
         - 괄호 짝, 중괄호 짝이 맞는지 확인하세요.
         """)
 
-    # 혹시 에디터에서 수정된 내용 업데이트
+    # 에디터에서 수정된 내용이 있으면 세션에 반영
     if new_latex_code != st.session_state.latex_code:
         st.session_state.latex_code = new_latex_code
     
-    # 렌더링 확인
+    # 렌더링 확인 버튼
     if st.button("렌더링 적용"):
         st.success("LaTeX 코드가 업데이트되었습니다. 아래에서 결과를 확인하세요.")
     
