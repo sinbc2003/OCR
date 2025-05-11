@@ -21,7 +21,7 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------------------------------
-# CSS: 배경 = 흰색, 텍스트 기본 검정. 단, selectbox 내용(#9CA3AF)로 지정
+# CSS: 배경 = 흰색, 텍스트 기본 검정. 단, selectbox 내용(#9CA3AF)로 지정`
 # placeholder "예) 홍길동"도 보통 Streamlit이 회색(#9CA3AF 근처) 처리
 st.markdown(
     """
@@ -288,7 +288,7 @@ if not st.session_state.is_logged_in:
     st.title("수학 손글씨 LaTeX 변환기")
     st.subheader("학생 정보 입력")
     
-    st.session_state.student_id = st.text_input("학번", placeholder="예) 20230123")
+    st.session_state.student_id = st.text_input("학번", placeholder="예) 250123")
     st.session_state.student_name = st.text_input("이름", placeholder="예) 홍길동")
     st.session_state.doc_type = st.selectbox("종류 선택", ["문제", "해설"])
     
