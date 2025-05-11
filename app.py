@@ -78,6 +78,17 @@ st.markdown("""
     .latex-preview p {
         color: #000000 !important;  /* p 태그의 텍스트 색상도 검정색으로 지정 */
     }
+    .rendered-latex-container {
+        background-color: #f8f9fa;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 10px 0;
+        overflow: auto;
+    }
+    .latex-line {
+        margin: 5px 0;
+    }
     .upload-section {
         padding: 1.5rem;
         border: 1px dashed #D1D5DB;
@@ -118,6 +129,94 @@ st.markdown("""
 # 제목
 st.title("수학 손글씨 LaTeX 변환기")
 st.markdown("손으로 작성한 수학 문제를 업로드하여 LaTeX 코드로 변환하고 실시간으로 렌더링해보세요.")
+
+# LaTeX 사용 가이드 컴포넌트
+def show_latex_guide():
+    """LaTeX 편집에 대한 도움말을 제공하는 확장 가능한 가이드를 표시합니다."""
+    with st.expander("LaTeX 편집 도움말", expanded=False):
+        st.markdown("""
+        ### LaTeX 편집 가이드
+        
+        수식 변환 결과가 완벽하지 않을 경우, 아래 가이드를 참고하여 수정할 수 있습니다:
+        
+        #### 자주 사용되는 LaTeX 명령어
+        
+        | 표현 | LaTeX 코드 | 설명 |
+        |------|------------|------|
+        | 분수 | `\\frac{분자}{분모}` | 분수 표현 |
+        | 제곱 | `x^2` | 위첨자(제곱) |
+        | 아래첨자 | `x_1` | 아래첨자 |
+        | 루트 | `\\sqrt{x}` | 제곱근 |
+        | n제곱근 | `\\sqrt[n]{x}` | n제곱근 |
+        | 괄호 | `\\left( ... \\right)` | 자동 크기 조절 괄호 |
+        | 일반 텍스트 | `\\text{텍스트}` | 수식 내 일반 텍스트 |
+        | 로그 | `\\log_{b}(x)` | 밑이 b인 로그 |
+        | 특수 기호 | `\\alpha`, `\\beta`, `\\theta` | 그리스 문자 |
+        | 무한대 | `\\infty` | 무한대 기호 |
+        
+        #### 줄바꿈 및 정렬
+        
+        * 새 줄 시작: 줄 끝에 `\\\\`를 추가합니다.
+        * 문단 구분: 빈 줄을 두 개 넣습니다.
+        
+        #### 일반적인 오류 수정
+        
+        * 괄호 짝이 맞지 않는 경우: 모든 괄호와 중괄호가 짝을 이루는지 확인하세요.
+        * 특수 문자 앞에는 백슬래시를 넣어야 합니다: `$, %, #, &, _` 등 문자 앞에는 `\\`를 붙여야 합니다.
+        * 렌더링이 되지 않는 경우: 추가 백슬래시를 제거하거나 괄호 짝을 확인하세요.
+        """)
+
+# 개선된 렌더링 섹션
+def display_latex_with_rendering(latex_code):
+    """줄바꿈이 포함된 LaTeX 코드를 보기 좋게 렌더링합니다."""
+    
+    # 코드 전처리: 불필요한 backtick 제거
+    if "```latex" in latex_code:
+        latex_code = latex_code.replace("```latex", "").replace("```", "")
+    
+    # 줄바꿈을 처리하기 위해 각 줄을 분리
+    lines = latex_code.strip().split('\n')
+    processed_lines = []
+    
+    for line in lines:
+        # 빈 줄은 건너뛰기
+        if not line.strip():
+            continue
+        
+        # 각 줄을 별도의 수식으로 처리 (줄바꿈 유지)
+        processed_line = line.strip()
+        processed_lines.append(processed_line)
+    
+    # 처리된 각 줄을 별도의 수식으로 표시 (줄바꿈 유지)
+    st.markdown('<div class="rendered-latex-container">', unsafe_allow_html=True)
+    
+    for i, line in enumerate(processed_lines):
+        # 각 줄을 별도의 수식으로 렌더링
+        st.markdown(f"""
+        <div class="latex-line">
+            <p style="color: black; margin: 8px 0;">$${line}$$</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 추가적인 HTML 컴포넌트를 통한 MathJax 렌더링
+    formatted_latex = "<br>".join([f"$${line}$$" for line in processed_lines])
+    
+    st.components.v1.html(f"""
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <div id="latex-render" style="padding: 20px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px; margin-top: 10px; color: black; overflow: auto; max-height: 500px;">
+        {formatted_latex}
+    </div>
+    <script>
+        window.onload = function() {{
+            if (typeof MathJax !== 'undefined') {{
+                MathJax.typeset();
+            }}
+        }}
+    </script>
+    """, height=500)  # 높이를 늘려 내용이 잘리지 않도록 함
 
 # 세션 상태 초기화
 if 'is_logged_in' not in st.session_state:
@@ -239,7 +338,7 @@ def extract_latex_from_image(image_data, api_key):
         debug_container.info("API 요청 준비 중...")
         
         # API 키 확인
-        if not api_key or len(api_key) < 10:  # API 키는 일반적으로 길이가 깁니다
+        if not api_key or len(api_key) < 10:
             raise ValueError("유효한 OpenAI API 키를 입력해주세요")
         
         # 이미지 전처리
@@ -247,10 +346,9 @@ def extract_latex_from_image(image_data, api_key):
         if image_data.mode == 'RGBA':
             image_data = image_data.convert('RGB')
             
-        # 이미지 크기 제한 (너무 큰 이미지는 처리 속도가 느려짐)
-        max_size = 1500  # 최대 크기 지정 (약간 줄임)
+        # 이미지 크기 제한
+        max_size = 1500
         if image_data.width > max_size or image_data.height > max_size:
-            # 비율 유지하며 크기 조정
             ratio = min(max_size / image_data.width, max_size / image_data.height)
             new_size = (int(image_data.width * ratio), int(image_data.height * ratio))
             image_data = image_data.resize(new_size, Image.LANCZOS)
@@ -262,9 +360,9 @@ def extract_latex_from_image(image_data, api_key):
         img_bytes = buffered.getvalue()
         base64_image = base64.b64encode(img_bytes).decode('utf-8')
         
-        # 이미지 크기 확인 (너무 크면 OpenAI API 제한에 걸릴 수 있음)
+        # 이미지 크기 확인
         img_size_mb = len(img_bytes) / (1024 * 1024)
-        if img_size_mb > 20:  # OpenAI는 일반적으로 20MB 미만 권장
+        if img_size_mb > 20:
             debug_container.warning(f"이미지 크기가 큽니다: {img_size_mb:.2f}MB. 처리 속도가 느릴 수 있습니다.")
         
         # OpenAI API 요청 설정
@@ -274,25 +372,39 @@ def extract_latex_from_image(image_data, api_key):
             "Authorization": f"Bearer {api_key}"
         }
         
-        # 모델 선택 - gpt-4o-mini로 설정 (o4-mini가 실패하면 폴백)
-        model_to_use = "gpt-4o-mini"
+        # 모델 선택 - o4-mini 먼저 시도, 실패시 gpt-4o-mini로 폴백
+        models_to_try = ["gpt-4o-mini", "o4-mini"]
+        model_to_use = models_to_try[0]
         
         debug_container.info(f"선택된 모델: {model_to_use}")
         
-        # 요청 페이로드 구성 - Chat Completions API 사용
+        # 개선된 시스템 프롬프트
+        system_prompt = """당신은 손글씨 수학 문제와 풀이를 LaTeX 코드로 변환하는 전문가입니다. 
+        이미지에서 보이는 수학 표현을 정확하게 LaTeX 코드로 변환해주세요.
+        
+        다음 지침을 준수해주세요:
+        1. 각 수식 또는 문단은 별도의 줄에 배치하여 가독성을 높여주세요.
+        2. 줄바꿈은 LaTeX 코드에서 명시적으로 처리해주세요.
+        3. 수식 번호나 문제 번호도 정확히 포함해주세요.
+        4. 설명이나 주석은 \\text{} 명령을 사용하여 포함해주세요.
+        5. 불필요한 설명이나 마크다운 서식(```latex 등)은 포함하지 마세요.
+        
+        출력 결과는 LaTeX 코드만 제공해주세요. 수식 구분을 위해 필요한 경우 줄바꿈을 사용하세요."""
+        
+        # 요청 페이로드 구성
         payload = {
             "model": model_to_use,
             "messages": [
                 {
                     "role": "system",
-                    "content": "당신은 손글씨 수학 문제와 풀이를 LaTeX 코드로 변환하는 전문가입니다. 이미지에서 보이는 수학 표현을 정확하게 LaTeX 코드로 변환해주세요. 설명 없이 LaTeX 코드만 제공해주세요."
+                    "content": system_prompt
                 },
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "text",
-                            "text": "이 수학 손글씨를 LaTeX 코드로 변환해주세요. LaTeX 코드만 제공해주세요."
+                            "text": "이 수학 손글씨를 LaTeX 코드로 변환해주세요. 각 수식이나 단락마다 줄바꿈을 사용하여 가독성 있게 출력해주세요."
                         },
                         {
                             "type": "image_url",
@@ -304,8 +416,8 @@ def extract_latex_from_image(image_data, api_key):
                     ]
                 }
             ],
-            "max_tokens": 1000,
-            "temperature": 0.3
+            "max_tokens": 1500,
+            "temperature": 0.2
         }
         
         # API 호출
@@ -316,6 +428,18 @@ def extract_latex_from_image(image_data, api_key):
             json=payload
         )
         
+        # 첫 번째 모델이 실패하면 두 번째 모델 시도
+        if response.status_code != 200 and len(models_to_try) > 1:
+            debug_container.warning(f"{model_to_use} 모델 사용 실패. {models_to_try[1]} 모델로 시도합니다.")
+            model_to_use = models_to_try[1]
+            payload["model"] = model_to_use
+            
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
+        
         # 응답 확인
         if response.status_code == 200:
             result = response.json()
@@ -323,6 +447,11 @@ def extract_latex_from_image(image_data, api_key):
             
             if "choices" in result and len(result["choices"]) > 0:
                 extracted_text = result["choices"][0]["message"]["content"]
+                
+                # 불필요한 마크다운 코드 블록 제거
+                if "```latex" in extracted_text:
+                    extracted_text = extracted_text.replace("```latex", "").replace("```", "")
+                
                 debug_container.empty()  # 디버그 메시지 숨기기
                 return extracted_text
             else:
@@ -331,7 +460,6 @@ def extract_latex_from_image(image_data, api_key):
         else:
             error_msg = f"API 오류 ({response.status_code}): {response.text}"
             debug_container.error(error_msg)
-            st.error(f"API 응답: {response.text}")
             return f"OpenAI API 오류가 발생했습니다: {error_msg}"
     except Exception as e:
         st.error(f"텍스트 추출 오류: {str(e)}")
@@ -476,6 +604,9 @@ with col1:
 with col2:
     st.header("2. LaTeX 코드 편집")
     
+    # LaTeX 사용 가이드 표시
+    show_latex_guide()
+    
     # LaTeX 코드 에디터
     st.markdown('<div class="editor-section">', unsafe_allow_html=True)
     new_latex_code = st_ace(
@@ -483,44 +614,26 @@ with col2:
         language="latex",
         theme="github",
         placeholder="LaTeX 코드가 여기에 표시됩니다. 필요한 경우 직접 편집할 수 있습니다.",
-        height=250,
+        height=300,  # 높이 증가
         key="latex_editor"
     )
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # 사용자가 코드를 변경했으면 세션 상태 업데이트
-    if new_latex_code != st.session_state.latex_code:
+    # 적용 버튼 추가
+    if st.button("렌더링 적용", key="apply_rendering"):
         st.session_state.latex_code = new_latex_code
+        st.success("LaTeX 코드가 업데이트되었습니다. 아래에서 결과를 확인하세요.")
+    
+    # 사용자가 코드를 변경했으면 세션 상태 자동 업데이트도 유지
+    elif new_latex_code != st.session_state.latex_code:
+        st.session_state.latex_code = new_latex_code
+        st.info("코드가 변경되었습니다. '렌더링 적용' 버튼을 클릭하여 결과를 확인하세요.")
     
     st.header("3. 렌더링 결과")
     
     if st.session_state.latex_code:
-        # MathJax로 렌더링 (LaTeX을 HTML에 삽입)
-        st.markdown(f"""
-        <div class="latex-preview">
-            <p style="color: black; font-size: 16px;">$$
-            {st.session_state.latex_code}
-            $$</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # MathJax 스크립트 직접 포함
-        st.components.v1.html(f"""
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-        <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-        <div id="latex-render" style="padding: 20px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px; margin-top: 10px; color: black;">
-            $$
-            {st.session_state.latex_code}
-            $$
-        </div>
-        <script>
-            window.onload = function() {{
-                if (typeof MathJax !== 'undefined') {{
-                    MathJax.typeset();
-                }}
-            }}
-        </script>
-        """, height=300)
+        # 개선된 렌더링 함수 호출
+        display_latex_with_rendering(st.session_state.latex_code)
         
         # 다운로드 버튼 - LaTeX 코드를 텍스트 파일로 저장
         latex_bytes = st.session_state.latex_code.encode()
