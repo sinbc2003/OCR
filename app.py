@@ -254,11 +254,12 @@ def extract_latex_from_image(image_data, api_key):
         models_to_try = ["gpt-4o-mini", "o4-mini", "gpt-3.5-turbo"]
         model_to_use = models_to_try[0]
         
-        # Prompt
+        # Prompt (문서 전처리 구문 금지)
         system_prompt = """당신은 손글씨로 된 수학 문제와 풀이를 정확한 LaTeX 코드로 변환하는 전문가입니다.
-- 본문 전체를 LaTeX 형식으로 변환하되, 불필요한 설명은 배제합니다.
-- 수식은 $$ ... $$ 로 감싸거나 \\begin{align*} ... \\end{align*} 등을 활용합니다.
+- \\documentclass, \\usepackage, \\begin{document}, \\end{document} 등은 사용하지 마세요.
+- 수식은 $$ ... $$ 또는 \\begin{align*} ... \\end{align*} 형태로 출력해주세요.
 - 문단/수식별로 줄바꿈(\\n)을 적절히 넣어 가독성을 높입니다.
+- 불필요한 설명, 보일러플레이트는 배제하고 핵심 LaTeX 식만 반환하세요.
 """
         
         # OpenAI API 호출
@@ -368,8 +369,9 @@ st.markdown(f"""
 # 레이아웃: 왼쪽 = 이미지 업로드/처리, 오른쪽 = LaTeX 에디터 & 미리보기
 left_col, right_col = st.columns(2)
 
+# ------------------------ 왼쪽
 with left_col:
-    st.header("1. 손글씨 이미지 업로드")
+    st.markdown("<h2 style='color: #2563EB;'>1. 손글씨 이미지 업로드</h2>", unsafe_allow_html=True)
     
     st.markdown('<div class="upload-section">', unsafe_allow_html=True)
     uploaded_file = st.file_uploader("이미지 (JPG/PNG)", type=["jpg", "jpeg", "png"])
@@ -407,11 +409,9 @@ with left_col:
     else:
         st.info("변환할 손글씨 이미지를 업로드하세요.")
 
+# ------------------------ 오른쪽
 with right_col:
-    st.header("2. LaTeX 코드 편집")
-    
-    # (디버깅 용) 현재 세션에 저장된 라텍스 코드 표시
-    # st.write("DEBUG - st.session_state.latex_code:", st.session_state.latex_code)
+    st.markdown("<h2 style='color: #2563EB;'>2. LaTeX 코드 편집</h2>", unsafe_allow_html=True)
     
     st.markdown('<div class="editor-section">', unsafe_allow_html=True)
     edited_code = st_ace(
@@ -429,7 +429,8 @@ with right_col:
     if edited_code != st.session_state.latex_code:
         st.session_state.latex_code = edited_code
     
-    st.header("3. 렌더링 결과")
+    # 렌더링 결과
+    st.markdown("<h2 style='color: #2563EB;'>3. 렌더링 결과</h2>", unsafe_allow_html=True)
     if st.session_state.latex_code.strip():
         display_latex_with_rendering(st.session_state.latex_code)
         
@@ -448,7 +449,7 @@ with right_col:
 # 3) 최종 제출 섹션
 if st.session_state.processing_complete and st.session_state.original_image:
     st.markdown("---")
-    st.markdown("## 최종 제출")
+    st.markdown("<h2 style='color: #2563EB;'>최종 제출</h2>", unsafe_allow_html=True)
     
     st.write("변환된 LaTeX 코드와 이미지를 제출하시겠습니까?")
     submit_area = st.empty()
