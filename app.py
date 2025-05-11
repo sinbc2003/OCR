@@ -21,16 +21,15 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------------------------------
-# CSS: 배경 = 흰색, 텍스트 기본 검정. 단, selectbox 내용(#9CA3AF)로 지정
+# CSS: 배경 = 흰색, 텍스트 기본 검정. 드롭다운은 밝은 회색(#cccccc)
 st.markdown(
     """
     <style>
-    /* 전체 배경 흰색 */
+    /* 전체 배경 흰색, 텍스트 검정 */
     body, .stApp, .block-container {
         background-color: #ffffff !important;
         color: #000000 !important;
     }
-    /* 기본 텍스트: 검정 */
     h1, h2, h3, h4, h5, h6, strong, p, div, label {
         color: #000000 !important;
     }
@@ -59,18 +58,16 @@ st.markdown(
         font-size: 0.875rem;
     }
 
-    /* selectbox(드롭다운) 글자색 = 회색(#9CA3AF). */
-    /* 1) 기본 필드에 보여지는 텍스트 색상 */
+    /* selectbox(드롭다운) 글자색: 밝은 회색(#cccccc) */
+    /* 기본 필드 및 드롭다운 열렸을 때 항목 모두 #cccccc로 */
     .stSelectbox div[data-baseweb="select"] * {
-        color: #9CA3AF !important;
+        color: #cccccc !important;
     }
-    /* 2) 드롭다운 열렸을 때 옵션 항목 색상 */
-    /*   (스트림릿 버전에 따라 class명이 다를 수 있으므로, -option 등 다양한 경우에 대응) */
     .stSelectbox [class*="option"] {
-        color: #9CA3AF !important;
+        color: #cccccc !important;
     }
     .stSelectbox [class*="-menu-item"] {
-        color: #9CA3AF !important;
+        color: #cccccc !important;
     }
     </style>
     """,
@@ -222,7 +219,7 @@ def extract_latex_from_image(image_data, api_key):
         model_to_use = "o4-mini"
         system_prompt = """당신은 수학 손글씨 이미지를 정확한 LaTeX 코드로 변환해주는 전문가입니다.
 - 불필요한 설명 없이, 오직 LaTeX 코드만 출력하세요.
-- mathjax로 렌더링이 되도록 수식은 $$로 감싸서 표현하세요. 텍스트는 그대로 출력하고, 수식은 달러 구분자 방식을 사용한 Math Mode를 사용하세요. 즉, 디스플레이 모드로 출력하시오.
+- $$ ... $$ 또는 \\begin{align*} ... \\end{align*} 등을 활용해 수식을 표현하세요.
 """
         
         headers = {
@@ -380,8 +377,8 @@ if st.session_state.processing_complete and st.session_state.original_image:
     if st.session_state.upload_status is None:
         if submit_area.button("제출하기"):
             with st.spinner("제출 중... 잠시만 기다려주세요."):
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"{st.session_state.student_id}_{st.session_state.student_name}_{timestamp}.jpg"
+                # 파일명: 학번_이름_종류.jpg
+                filename = f"{st.session_state.student_id}_{st.session_state.student_name}_{st.session_state.doc_type}.jpg"
                 
                 # 1) 이미지 업로드
                 success_drive, drive_result = upload_to_drive(
@@ -431,7 +428,7 @@ if st.session_state.processing_complete and st.session_state.original_image:
 # 하단 정보
 st.markdown("""
 <footer>
-    <p>제작 : 교사 신병철</p>
+    <p>이 앱은 Streamlit + OpenAI API (o4-mini)로 제작되었습니다.</p>
     <p>© 2025 수학 손글씨 LaTeX 변환기</p>
 </footer>
 """, unsafe_allow_html=True)
