@@ -21,41 +21,12 @@ st.set_page_config(
     layout="wide"
 )
 
-###############################################################################
-# (1) 알림 상자 시각적 문제 해결용 CSS
-# 다크 모드 환경에서도 st.success(), st.warning(), st.error() 등의 텍스트가 보이도록
-###############################################################################
-st.markdown("""
-<style>
-/* 알림 상자 (st.success, st.warning, st.error 등)의 배경과 텍스트 색상 강제 지정 */
-.stAlert {
-  background-color: #DFF0D8 !important; /* 라이트그린 계열 */
-  color: #000000 !important;           /* 텍스트는 검정색 */
-}
-.stAlert svg {
-  fill: #000000 !important; /* 아이콘(체크/경고 등)도 검정으로 */
-}
-
-/* 다크 모드 환경에서도 동일하게 보이도록 강제 */
-@media (prefers-color-scheme: dark) {
-  .stAlert {
-    background-color: #DFF0D8 !important;
-    color: #000000 !important;
-  }
-  .stAlert svg {
-    fill: #000000 !important;
-  }
-}
-</style>
-""", unsafe_allow_html=True)
-
-###############################################################################
-# (2) 기존 CSS 스타일 (앱 전반 디자인, 에디터, 라이트 모드 강제 등)
-# 필요에 맞춰 수정/추가
-###############################################################################
-st.markdown("""
-<style>
-    /* 전체/배경을 라이트 모드로 강제(추가 적용) */
+# -------------------------------------------------------------------------------------
+# 강제 라이트 테마용 CSS (다크 모드 무시)
+st.markdown(
+    """
+    <style>
+    /* 전체 바디를 흰 배경 + 검정 텍스트로 강제 */
     @media (prefers-color-scheme: dark) {
       body, .stApp {
         background-color: #ffffff !important;
@@ -66,7 +37,30 @@ st.markdown("""
         background-color: #ffffff !important;
         color: #000000 !important;
     }
+    /* Ace Editor 내부 요소들 강제 흰 배경/검정 텍스트 */
+    .ace_editor,
+    .ace_scroller,
+    .ace_content,
+    .ace_gutter {
+        background: #ffffff !important;
+        color: #000000 !important;
+    }
+    .ace_print-margin {
+        background-color: #ffffff !important;
+    }
+    .ace_gutter {
+        background-color: #f7f7f7 !important;
+        color: #666666 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+# -------------------------------------------------------------------------------------
 
+# 기존 CSS 스타일 (앱 전반 디자인)
+st.markdown("""
+<style>
     .main {
         padding: 2rem;
     }
@@ -117,10 +111,10 @@ st.markdown("""
         background-color: #F9FAFB;
         min-height: 200px;
         margin-bottom: 1rem;
-        color: #000000 !important;  /* 텍스트 색상을 검정색으로 */
+        color: #000000 !important;  /* 텍스트 색상을 검정색으로 강제 지정 */
     }
     .latex-preview p {
-        color: #000000 !important;
+        color: #000000 !important;  /* p 태그의 텍스트 색상도 검정색으로 지정 */
     }
     .rendered-latex-container {
         background-color: #ffffff;
@@ -172,6 +166,7 @@ st.markdown("""
         color: #6B7280;
         font-size: 0.875rem;
     }
+    /* 추가 스타일 */
     .render-box {
         margin-top: 1.5rem;
         margin-bottom: 2rem;
@@ -184,80 +179,52 @@ st.markdown("""
         font-weight: bold;
         margin-bottom: 0.5rem;
     }
+    /* 편집기 활성화 표시 */
     .editor-active {
         border: 2px solid #3B82F6;
         box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
     }
-
-    /* Ace Editor 관련, 강제 라이트 배경 */
-    .ace_editor,
-    .ace_scroller,
-    .ace_content,
-    .ace_gutter {
-        background: #ffffff !important;
-        color: #000000 !important;
-    }
-    .ace_print-margin {
-        background-color: #ffffff !important;
-    }
-    .ace_gutter {
-        background-color: #f7f7f7 !important;
-        color: #666666 !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-###############################################################################
-# 제목/소개
-###############################################################################
+# 제목
 st.title("수학 손글씨 LaTeX 변환기")
 st.markdown("손으로 작성한 수학 문제를 업로드하여 LaTeX 코드로 변환하고 실시간으로 렌더링해보세요.")
 
-###############################################################################
-# (3) LaTeX 렌더링 함수 : \[...\] 제거 후 $$...$$로 통일
-###############################################################################
+# --------------------
+# 라텍스 렌더링 함수
 def display_latex_with_rendering(latex_code):
-    """
-    모델에서 \[...\] 형태로 반환된 수식을 
-    $$ ... $$ 형태로만 렌더링하도록 전처리.
-    """
-    # 불필요한 ```latex 제거
+    """줄바꿈이 포함된 LaTeX 코드를 보기 좋게 렌더링합니다."""
+    
+    # 코드 전처리: 불필요한 backtick 제거
     if "```latex" in latex_code:
         latex_code = latex_code.replace("```latex", "").replace("```", "")
     
-    # 라인 단위로 분할
+    # 줄바꿈을 처리하기 위해 각 줄을 분리
     lines = latex_code.strip().split('\n')
     processed_lines = []
     
     for line in lines:
-        line = line.strip()
-        if not line:
+        # 빈 줄은 건너뛰기
+        if not line.strip():
             continue
         
-        # \[...\] -> 제거
-        line = line.replace("\\[", "").replace("\\]", "")
-        # (필요 시, $$ 중복제거도 가능)
-
-        processed_lines.append(line)
+        # 각 줄을 별도의 수식으로 처리 (줄바꿈 유지)
+        processed_line = line.strip()
+        processed_lines.append(processed_line)
     
-    # 컨테이너 시작
-    st.markdown(
-        '<div class="rendered-latex-container" style="background-color: #ffffff; color: #000000;">',
-        unsafe_allow_html=True
-    )
-    
-    # 각 줄을 $$ ... $$로 감싸서 렌더링
-    for line in processed_lines:
-        st.markdown(
-            f"<div class='latex-line'><p>$$ { line } $$</p></div>",
-            unsafe_allow_html=True
-        )
-    
+    # 처리된 각 줄을 별도의 수식으로 표시
+    st.markdown('<div class="rendered-latex-container" style="background-color: #ffffff; color: #000000;">', unsafe_allow_html=True)
+    for i, line in enumerate(processed_lines):
+        st.markdown(f"""
+        <div class="latex-line">
+            <p style="color: black; margin: 8px 0;">$${line}$$</p>
+        </div>
+        """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-###############################################################################
-# (4) 세션 상태 초기화
-###############################################################################
+# --------------------
+# 세션 상태 초기화
 if 'is_logged_in' not in st.session_state:
     st.session_state.is_logged_in = False
 if 'student_id' not in st.session_state:
@@ -273,16 +240,14 @@ if 'upload_status' not in st.session_state:
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
 
-###############################################################################
-# (5) API 키 및 Google Drive/Sheet 설정
-###############################################################################
+# --------------------
+# API 키 및 구글 드라이브 설정 가져오기
 api_key = st.secrets.get("OPENAI_API_KEY", "")
 drive_folder_id = st.secrets.get("DRIVE_FOLDER_ID", "")
 spreadsheet_id = st.secrets.get("SPREADSHEET_ID", "")
 
-###############################################################################
-# (6) 구글 API 인증 및 서비스
-###############################################################################
+# 구글 API 인증 및 서비스 설정
+from google.oauth2 import service_account
 def get_google_service(api_name, api_version, scopes):
     try:
         credentials = service_account.Credentials.from_service_account_info(
@@ -301,9 +266,8 @@ def get_drive_service():
 def get_sheets_service():
     return get_google_service('sheets', 'v4', ['https://www.googleapis.com/auth/spreadsheets'])
 
-###############################################################################
-# (7) 구글 드라이브 업로드 함수
-###############################################################################
+# --------------------
+# 구글 드라이브 업로드
 def upload_to_drive(image, filename, folder_id, mime_type="image/jpeg"):
     try:
         service = get_drive_service()
@@ -319,7 +283,11 @@ def upload_to_drive(image, filename, folder_id, mime_type="image/jpeg"):
             'parents': [folder_id]
         }
         
-        media = MediaIoBaseUpload(buffered, mimetype=mime_type, resumable=True)
+        media = MediaIoBaseUpload(
+            buffered, 
+            mimetype=mime_type,
+            resumable=True
+        )
         
         file = service.files().create(
             body=file_metadata,
@@ -331,9 +299,8 @@ def upload_to_drive(image, filename, folder_id, mime_type="image/jpeg"):
     except Exception as e:
         return False, f"이미지 업로드 오류: {str(e)}"
 
-###############################################################################
-# (8) 구글 시트에 LaTeX 코드 추가
-###############################################################################
+# --------------------
+# 구글 시트 업데이트
 def append_to_sheet(spreadsheet_id, student_id, student_name, latex_code, image_id):
     try:
         service = get_sheets_service()
@@ -358,7 +325,7 @@ def append_to_sheet(spreadsheet_id, student_id, student_name, latex_code, image_
         
         result = service.spreadsheets().values().append(
             spreadsheetId=spreadsheet_id,
-            range='Sheet1!A:E',  
+            range='Sheet1!A:E',  # 시트 이름+범위
             valueInputOption='RAW',
             insertDataOption='INSERT_ROWS',
             body=body
@@ -368,10 +335,10 @@ def append_to_sheet(spreadsheet_id, student_id, student_name, latex_code, image_
     except Exception as e:
         return False, f"시트 업데이트 오류: {str(e)}"
 
-###############################################################################
-# (9) OpenAI API: 이미지 → LaTeX 추출
-###############################################################################
+# --------------------
+# OpenAI API로 이미지 → LaTeX
 def extract_latex_from_image(image_data, api_key):
+    """OpenAI API를 사용하여 이미지에서 LaTeX 코드를 추출."""
     try:
         debug_container = st.empty()
         debug_container.info("API 요청 준비 중...")
@@ -379,6 +346,7 @@ def extract_latex_from_image(image_data, api_key):
         if not api_key or len(api_key) < 10:
             raise ValueError("유효한 OpenAI API 키를 입력해주세요")
         
+        # 이미지 전처리
         debug_container.info("이미지 전처리 중...")
         if image_data.mode == 'RGBA':
             image_data = image_data.convert('RGB')
@@ -389,7 +357,7 @@ def extract_latex_from_image(image_data, api_key):
             new_size = (int(image_data.width * ratio), int(image_data.height * ratio))
             image_data = image_data.resize(new_size, Image.LANCZOS)
             
-        # Base64
+        # Base64 인코딩
         debug_container.info("이미지를 Base64로 인코딩 중...")
         buffered = io.BytesIO()
         image_data.save(buffered, format="PNG")
@@ -398,23 +366,25 @@ def extract_latex_from_image(image_data, api_key):
         
         img_size_mb = len(img_bytes) / (1024 * 1024)
         if img_size_mb > 20:
-            debug_container.warning(f"이미지 크기가 큽니다: {img_size_mb:.2f}MB.")
+            debug_container.warning(f"이미지 크기가 큼: {img_size_mb:.2f}MB. 처리 지연 가능.")
         
+        # OpenAI API 설정
+        debug_container.info("OpenAI API 호출 준비 중...")
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
         }
         
-        # 모델 후보
-        models_to_try = ["gpt-4o-mini", "o4-mini", "gpt-3.5-turbo"]
+        # 원하는 모델 시도
+        models_to_try = ["gpt-4o-mini", "o4-mini", "gpt-3.5-turbo"]  # 필요 시 추가
         model_to_use = models_to_try[0]
         
         debug_container.info(f"선택된 모델: {model_to_use}")
         
-        system_prompt = """당신은 손글씨 수학 문제를 정확히 LaTeX 수식으로 변환하는 전문가입니다.
+        system_prompt = """당신은 손글씨 수학 문제와 풀이를 LaTeX 코드로 변환하는 전문가입니다.
         - 수식이나 문단마다 줄바꿈(\\n) 잘 넣어 가독성 높게.
         - 불필요한 마크다운(```latex 등) 넣지 말 것.
-        - LaTeX 코드만 출력.
+        - LaTeX 코드만 출력 (추가 설명 불필요).
         """
         
         payload = {
@@ -445,30 +415,28 @@ def extract_latex_from_image(image_data, api_key):
             "temperature": 0.2
         }
         
-        # 첫 호출
         response = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers=headers,
             json=payload
         )
         
-        # 실패 시 다른 모델 시도
+        # 첫 번째 모델 실패 시 다른 모델 시도
         if response.status_code != 200 and len(models_to_try) > 1:
             debug_container.warning(f"{model_to_use} 모델 실패. {models_to_try[1]} 모델로 재시도.")
             model_to_use = models_to_try[1]
             payload["model"] = model_to_use
-            
             response = requests.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers=headers,
                 json=payload
             )
             
+            # 그래도 안되면 3번째 모델도 시도 가능...
             if response.status_code != 200 and len(models_to_try) > 2:
                 debug_container.warning(f"{model_to_use} 모델도 실패. {models_to_try[2]} 모델로 재시도.")
                 model_to_use = models_to_try[2]
                 payload["model"] = model_to_use
-                
                 response = requests.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers=headers,
@@ -482,13 +450,14 @@ def extract_latex_from_image(image_data, api_key):
             if "choices" in result and len(result["choices"]) > 0:
                 extracted_text = result["choices"][0]["message"]["content"]
                 
+                # 불필요한 마크다운 코드블록 제거
                 if "```latex" in extracted_text:
                     extracted_text = extracted_text.replace("```latex", "").replace("```", "")
                 
                 debug_container.empty()
                 return extracted_text
             else:
-                debug_container.error("API 응답에 'choices'가 없습니다.")
+                debug_container.error("API 응답에 choices가 없습니다.")
                 return "LaTeX 추출 실패: 결과 없음."
         else:
             error_msg = f"API 오류 ({response.status_code}): {response.text}"
@@ -499,9 +468,8 @@ def extract_latex_from_image(image_data, api_key):
         st.error(f"상세 오류: {traceback.format_exc()}")
         return f"추출 중 오류: {str(e)}"
 
-###############################################################################
-# (10) 로그인 로직
-###############################################################################
+# --------------------
+# (A) 로그인 화면
 if not st.session_state.is_logged_in:
     st.markdown("## 학생 정보 입력")
     st.markdown('<div class="user-info-box">', unsafe_allow_html=True)
@@ -524,21 +492,19 @@ if not st.session_state.is_logged_in:
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-###############################################################################
-# (11) 로그인 후 화면
-###############################################################################
+# --------------------
+# (B) 로그인 후 화면
 st.markdown(f"""
 <div class="user-info-box">
     <p><strong>학번:</strong> {st.session_state.student_id} | <strong>이름:</strong> {st.session_state.student_name}</p>
 </div>
 """, unsafe_allow_html=True)
 
-# 2개 열로 나누기
+# 레이아웃: 왼쪽(이미지), 오른쪽(라텍스)
 col1, col2 = st.columns(2)
 
-###############################################################################
-# (12) 왼쪽 컬럼: 이미지 업로드 + OpenAI 처리
-###############################################################################
+# --------------------
+# 왼쪽: 이미지 업로드 및 처리
 with col1:
     st.header("1. 손글씨 이미지 업로드")
     upload_placeholder = st.empty()
@@ -555,17 +521,15 @@ with col1:
             
             if image.mode == 'RGBA':
                 image = image.convert('RGB')
-                st.info("RGBA 이미지를 RGB로 변환했습니다.")
+                st.info("RGBA → RGB 변환 완료.")
             
-            # 크기가 너무 크면 리사이즈
             max_size = 1500
             if image.width > max_size or image.height > max_size:
                 ratio = min(max_size / image.width, max_size / image.height)
                 new_size = (int(image.width * ratio), int(image.height * ratio))
                 image = image.resize(new_size, Image.LANCZOS)
-                st.info(f"이미지가 커서 {new_size}로 리사이즈했습니다.")
+                st.info(f"크기 조정: {new_size}")
             
-            # 세션에 저장
             st.session_state.original_image = image
             st.image(image, caption="업로드한 이미지", use_column_width=True)
             
@@ -575,7 +539,7 @@ with col1:
             if process_button:
                 status_container.info("처리 시작...")
                 if not api_key:
-                    st.error("OpenAI API 키가 없습니다. 시크릿에 'OPENAI_API_KEY'를 설정하세요.")
+                    st.error("OpenAI API 키가 없습니다. secrets에 'OPENAI_API_KEY' 설정 필요.")
                 else:
                     try:
                         progress_bar = st.progress(0)
@@ -587,19 +551,19 @@ with col1:
                         status_text.text("OpenAI API 호출 중...")
                         progress_bar.progress(50)
                         
-                        # OpenAI로 LaTeX 추출
+                        # 모델 호출하여 LaTeX 추출
                         latex_result = extract_latex_from_image(image, api_key)
                         
                         progress_bar.progress(75)
-                        status_text.text("결과 반영 중...")
+                        status_text.text("처리 결과 업데이트 중...")
                         
-                        # 세션에 저장 → 오른쪽 에디터에서 확인
+                        # 추출 결과를 세션에 저장 → 2번 에디터에서 확인
                         st.session_state.latex_code = latex_result
                         st.session_state.processing_complete = True
                         
                         progress_bar.progress(100)
                         status_text.text("완료!")
-                        status_container.success("이미지 처리가 완료되었습니다! 오른쪽에서 LaTeX 코드를 확인하세요.")
+                        status_container.success("이미지 처리가 완료되었습니다. 오른쪽 에디터에서 확인/편집하세요.")
                         
                         time.sleep(1)
                         st.experimental_rerun()
@@ -609,55 +573,58 @@ with col1:
                         st.error(traceback.format_exc())
             
             elif st.session_state.latex_code:
-                status_container.success("이미지를 이미 처리했습니다. 오른쪽에서 편집 가능.")
+                # 만약 이미 처리한 적이 있고 세션에 코드가 있다면 안내
+                status_container.success("이미 처리된 이미지입니다. 오른쪽 에디터에서 확인하세요.")
                 
         except Exception as e:
             st.error(f"이미지 처리 오류: {str(e)}")
-            st.info("이미지 형식을 확인하거나 다른 파일로 시도해보세요.")
+            st.info("이미지 형식을 다시 확인하거나 다른 파일을 시도해보세요.")
     else:
         st.info("이미지를 업로드해주세요.")
 
-###############################################################################
-# (13) 오른쪽 컬럼: LaTeX 코드 에디터 + 렌더링
-###############################################################################
+# --------------------
+# 오른쪽: LaTeX 에디터 + 렌더링
 with col2:
     st.header("2. LaTeX 코드 편집")
-    
     st.markdown('<div class="editor-section">', unsafe_allow_html=True)
     
-    # Ace 에디터 초기값
     editor_value = st.session_state.latex_code if st.session_state.latex_code else ""
     
+    # theme="chrome"로 강제 라이트 테마
     new_latex_code = st_ace(
         value=editor_value,
         language="latex",
-        theme="chrome",  # 라이트 테마 강제
-        placeholder="LaTeX 코드가 여기에 표시됩니다. 필요한 경우 수정하세요.",
+        theme="chrome",  # 또는 "xcode", "textmate", ...
+        placeholder="여기에 LaTeX 코드가 표시됩니다. 필요 시 직접 편집하세요.",
         height=300,
         key="latex_editor",
         wrap=True
     )
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # LaTeX 도움말
     with st.expander("LaTeX 편집 도움말", expanded=False):
         st.markdown("""
         ### LaTeX 편집 가이드
         
+        자주 쓰는 예시:
         - 분수: `\\frac{a}{b}`
-        - 제곱/아래첨자: `x^2`, `x_1`
+        - 제곱: `x^2`, 아래첨자: `x_1`
         - 루트: `\\sqrt{x}`, n제곱근: `\\sqrt[n]{x}`
-        - 괄호: `\\left( ... \\right)`
+        - 로그: `\\log_{2}(x)`
+        - 괄호: `\\left( ... \\right)`  (크기 자동)
         - 텍스트: `\\text{내용}`
         
-        새 줄 시작: `\\\\`  
-        특수문자 `$, %, _, {, }` 등은 `\\` 붙여야 합니다.
+        **Tip:**  
+        - 새 줄 시작은 `\\\\`  
+        - 특수문자 `$, %, _, {, }` 등은 앞에 `\\` 붙임  
+        - 괄호 짝, 중괄호 짝이 맞는지 확인하세요.
         """)
-    
-    # 에디터 내용이 바뀌었다면 세션에 반영
+
+    # 혹시 에디터에서 수정된 내용 업데이트
     if new_latex_code != st.session_state.latex_code:
         st.session_state.latex_code = new_latex_code
     
+    # 렌더링 확인
     if st.button("렌더링 적용"):
         st.success("LaTeX 코드가 업데이트되었습니다. 아래에서 결과를 확인하세요.")
     
@@ -665,6 +632,7 @@ with col2:
     if st.session_state.latex_code:
         display_latex_with_rendering(st.session_state.latex_code)
         
+        # 다운로드 버튼
         latex_bytes = st.session_state.latex_code.encode()
         st.download_button(
             label="LaTeX 코드 다운로드",
@@ -676,14 +644,13 @@ with col2:
         st.markdown("""
         <div class="latex-preview">
             <p style="color:#000000; text-align:center; padding-top:70px;">
-                변환된 LaTeX 코드가 아직 없습니다.
+                아직 변환된 LaTeX 코드가 없습니다.
             </p>
         </div>
         """, unsafe_allow_html=True)
 
-###############################################################################
-# (14) 최종 제출 섹션
-###############################################################################
+# --------------------
+# 최종 제출 섹션
 if st.session_state.processing_complete and st.session_state.original_image is not None:
     st.markdown("---")
     st.markdown("## 최종 확인 및 제출")
@@ -726,7 +693,7 @@ if st.session_state.processing_complete and st.session_state.original_image is n
     
     if st.session_state.upload_status == "success":
         submit_button_placeholder.empty()
-        status_placeholder.success("제출이 완료되었습니다! 제출해 주셔서 감사합니다.")
+        status_placeholder.success("제출이 완료되었습니다! 감사합니다.")
         
         if st.button("다시 시작하기", key="restart"):
             st.session_state.latex_code = ""
@@ -743,12 +710,11 @@ if st.session_state.processing_complete and st.session_state.original_image is n
             st.session_state.upload_status = None
             st.experimental_rerun()
 
-###############################################################################
-# (15) 하단 정보(푸터)
-###############################################################################
+# --------------------
+# 하단 정보
 st.markdown("""
 <footer>
-    <p>이 앱은 Streamlit과 OpenAI API를 사용하여 제작되었습니다.</p>
+    <p>이 앱은 Streamlit + OpenAI API로 제작되었습니다.</p>
     <p>© 2025 수학 손글씨 LaTeX 변환기</p>
 </footer>
 """, unsafe_allow_html=True)
