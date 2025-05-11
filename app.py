@@ -26,7 +26,7 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* 전체 배경을 흰색으로, 글자색은 검정으로 */
+    /* 전체 배경을 흰색, 글자색은 검정 */
     body, .stApp, .block-container {
         background-color: #ffffff !important;
         color: #000000 !important;
@@ -43,6 +43,11 @@ st.markdown(
         background: #ffffff !important;
         color: #000000 !important;
     }
+    /* 추가로 ace_chrome 클래스도 지정 */
+    .ace_chrome {
+        background: #ffffff !important;
+        color: #000000 !important;
+    }
     .ace_print-margin {
         background-color: #ffffff !important;
     }
@@ -53,7 +58,7 @@ st.markdown(
     /* 기본 버튼 색상 */
     .stButton>button {
         background-color: #2563EB !important;
-        color: white !important;
+        color: #ffffff !important;
         font-weight: 500 !important;
     }
     .stButton>button:hover {
@@ -257,7 +262,7 @@ def extract_latex_from_image(image_data, api_key):
         # Prompt
         system_prompt = """당신은 손글씨로 된 수학 문제와 풀이를 정확한 LaTeX 코드로 변환하는 전문가입니다.
 - 본문 전체를 LaTeX 형식으로 변환하되, 불필요한 설명은 배제합니다.
-- 수식은 $$ ... $$ 로 감싸서 출력합니다.
+- 수식은 $$ ... $$ 로 감싸거나 \\begin{align*} ... \\end{align*} 등을 활용합니다.
 - 문단/수식별로 줄바꿈(\\n)을 적절히 넣어 가독성을 높입니다.
 """
         
@@ -398,7 +403,7 @@ with left_col:
                     
                     st.success("추출된 LaTeX 코드는 우측 '2. LaTeX 코드 편집'에서 확인/수정하세요.")
                     
-                    # 변환 직후 즉시 리런 → 우측 에디터가 st.session_state.latex_code를 읽도록
+                    # 변환 직후 즉시 리런
                     st.experimental_rerun()
         
         except Exception as ex:
@@ -410,24 +415,27 @@ with left_col:
 with right_col:
     st.header("2. LaTeX 코드 편집")
     
-    # (디버깅 용) 현재 세션에 저장된 라텍스 코드 표시
-    # st.write("DEBUG - st.session_state.latex_code:", st.session_state.latex_code)
-    
+    # (디버깅) 현재 세션 상태 확인
+    st.write("**[디버그] 세션에 저장된 LaTeX 코드:**", st.session_state.latex_code)
+
     st.markdown('<div class="editor-section">', unsafe_allow_html=True)
+    
     edited_code = st_ace(
         value=st.session_state.latex_code,
         language="latex",
         theme="chrome",
-        placeholder="추출된 LaTeX 코드가 여기 표시됩니다.\n수정 시 직접 입력하세요.",
+        placeholder="(모델 추출 결과가 여기에 표시됩니다)\n필요시 직접 수정하세요...",
         height=300,
         key="ace_editor",
         wrap=True
     )
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # 에디터에서 수정된 내용 세션에 저장
-    if edited_code != st.session_state.latex_code:
-        st.session_state.latex_code = edited_code
+    # 디버깅: ace에서 가져온 결과
+    st.write("**[디버그] 에디터에서 가져온 code:**", edited_code)
+
+    # 조건 없이 세션에 반영
+    st.session_state.latex_code = edited_code
     
     st.header("3. 렌더링 결과")
     if st.session_state.latex_code.strip():
