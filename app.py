@@ -21,8 +21,7 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------------------------------
-# CSS: 배경 = 흰색, 텍스트 기본 검정. 단, selectbox 내용(#9CA3AF)로 지정`
-# placeholder "예) 홍길동"도 보통 Streamlit이 회색(#9CA3AF 근처) 처리
+# CSS: 배경 = 흰색, 텍스트 기본 검정. 단, selectbox 내용(#9CA3AF)로 지정
 st.markdown(
     """
     <style>
@@ -31,8 +30,7 @@ st.markdown(
         background-color: #ffffff !important;
         color: #000000 !important;
     }
-    /* 기본 텍스트: 검정.
-       하지만 selectbox 항목은 placeholder색(#9CA3AF)로 표시 */
+    /* 기본 텍스트: 검정 */
     h1, h2, h3, h4, h5, h6, strong, p, div, label {
         color: #000000 !important;
     }
@@ -61,12 +59,17 @@ st.markdown(
         font-size: 0.875rem;
     }
 
-    /* selectbox(드롭다운) 내부 텍스트 색상 = #9CA3AF(회색) */
+    /* selectbox(드롭다운) 글자색 = 회색(#9CA3AF). */
+    /* 1) 기본 필드에 보여지는 텍스트 색상 */
     .stSelectbox div[data-baseweb="select"] * {
         color: #9CA3AF !important;
     }
-    /* 혹시 옵션 부분도 별도 스타일이 있다면 추가 */
-    .stSelectbox .css-1c9b0pz-option {
+    /* 2) 드롭다운 열렸을 때 옵션 항목 색상 */
+    /*   (스트림릿 버전에 따라 class명이 다를 수 있으므로, -option 등 다양한 경우에 대응) */
+    .stSelectbox [class*="option"] {
+        color: #9CA3AF !important;
+    }
+    .stSelectbox [class*="-menu-item"] {
         color: #9CA3AF !important;
     }
     </style>
@@ -288,7 +291,7 @@ if not st.session_state.is_logged_in:
     st.title("수학 손글씨 LaTeX 변환기")
     st.subheader("학생 정보 입력")
     
-    st.session_state.student_id = st.text_input("학번", placeholder="예) 250123")
+    st.session_state.student_id = st.text_input("학번", placeholder="예) 20230123")
     st.session_state.student_name = st.text_input("이름", placeholder="예) 홍길동")
     st.session_state.doc_type = st.selectbox("종류 선택", ["문제", "해설"])
     
@@ -428,7 +431,7 @@ if st.session_state.processing_complete and st.session_state.original_image:
 # 하단 정보
 st.markdown("""
 <footer>
-    <p> 제작 : 교사 신병철 </p>
+    <p>제작 : 교사 신병철</p>
     <p>© 2025 수학 손글씨 LaTeX 변환기</p>
 </footer>
 """, unsafe_allow_html=True)
