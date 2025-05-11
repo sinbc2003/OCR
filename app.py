@@ -26,16 +26,16 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* 전체 바디와 스트림릿 앱 영역을 흰 배경/검정 텍스트로 통일 */
+    /* 전체 배경을 흰색으로, 글자색은 검정으로 */
     body, .stApp, .block-container {
         background-color: #ffffff !important;
         color: #000000 !important;
     }
-    /* streamlit의 info, warning, error 박스 배경/글자색 보정 */
+    /* streamlit의 info, warning, error 박스 내부 글자도 검정색 */
     .stAlert p {
         color: #000000 !important;
     }
-    /* Ace Editor 내부를 강제 흰 배경 + 검정글자로 */
+    /* Ace Editor 배경/글자색 */
     .ace_editor,
     .ace_scroller,
     .ace_content,
@@ -50,7 +50,7 @@ st.markdown(
         background-color: #f7f7f7 !important;
         color: #666666 !important;
     }
-    /* 버튼, 제목 등에 쓰일 기본 스타일 약간 보정 */
+    /* 기본 버튼 색상 */
     .stButton>button {
         background-color: #2563EB !important;
         color: white !important;
@@ -195,7 +195,7 @@ def append_to_sheet(spreadsheet_id, student_id, student_name, latex_code, image_
     try:
         service = get_sheets_service()
         if service is None:
-            return False, "시트트 서비스가 None입니다."
+            return False, "시트 서비스가 None입니다."
         
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
@@ -229,7 +229,7 @@ def extract_latex_from_image(image_data, api_key):
     
     try:
         if not api_key or len(api_key) < 10:
-            raise ValueError("유효한 OpenAI API 키가 없습니다. (secrets에서 OPENAI_API_KEY 설정 필요)")
+            raise ValueError("유효한 OpenAI API 키가 없습니다. (secrets에 OPENAI_API_KEY 필요)")
         
         status_box.info("이미지 전처리 중...")
         # RGBA → RGB 변환
@@ -250,14 +250,14 @@ def extract_latex_from_image(image_data, api_key):
         img_bytes = buffered.getvalue()
         base64_image = base64.b64encode(img_bytes).decode('utf-8')
         
-        # (예시) 모델 후보
+        # 모델 후보 (예시)
         models_to_try = ["gpt-4o-mini", "o4-mini", "gpt-3.5-turbo"]
         model_to_use = models_to_try[0]
         
         # Prompt
         system_prompt = """당신은 손글씨로 된 수학 문제와 풀이를 정확한 LaTeX 코드로 변환하는 전문가입니다.
 - 본문 전체를 LaTeX 형식으로 변환하되, 불필요한 설명은 배제합니다.
-- 수식은 $$ ... $$ 로 감싸거나 \\begin{align*} ... \\end{align*} 형태를 허용합니다.
+- 수식은 $$ ... $$ 로 감싸거나 \\begin{align*} ... \\end{align*} 등을 활용합니다.
 - 문단/수식별로 줄바꿈(\\n)을 적절히 넣어 가독성을 높입니다.
 """
         
@@ -266,7 +266,6 @@ def extract_latex_from_image(image_data, api_key):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
         }
-        
         payload = {
             "model": model_to_use,
             "messages": [
@@ -298,7 +297,7 @@ def extract_latex_from_image(image_data, api_key):
             idx_model += 1
             model_to_use = models_to_try[idx_model]
             payload["model"] = model_to_use
-            status_box.warning(f"{models_to_try[idx_model-1]} 모델 실패 → {model_to_use}로 재시도합니다.")
+            status_box.warning(f"{models_to_try[idx_model-1]} 모델 실패 → {model_to_use} 모델로 재시도...")
             response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
         
         if response.status_code != 200:
@@ -315,7 +314,6 @@ def extract_latex_from_image(image_data, api_key):
         if "```latex" in extracted_text:
             extracted_text = extracted_text.replace("```latex", "").replace("```", "")
         
-        # 최종 LaTeX 코드
         status_box.success("LaTeX 추출 완료!")
         return extracted_text
     
@@ -326,13 +324,11 @@ def extract_latex_from_image(image_data, api_key):
 
 # ----------------------------------------------------------------------------
 # 라텍스 렌더링 함수
-def display_latex_with_rendering(latex_code):
+def display_latex_with_rendering(latex_code: str):
     """
-    Streamlit은 기본적으로 st.markdown() 호출 시
+    Streamlit은 기본적으로 st.markdown() 안에서
     $$...$$ 또는 $...$ 패턴을 수학 수식으로 렌더링한다.
     """
-    # 그냥 st.markdown에 넣으면 자동 렌더링된다.
-    # 여러 줄 환경(align 등)도 $$...$$로 감싸져 있으면 가능.
     st.markdown(latex_code)
 
 # ----------------------------------------------------------------------------
@@ -395,13 +391,14 @@ with left_col:
                     # 모델 추출
                     with st.spinner("이미지 분석 및 LaTeX 변환 중..."):
                         latex_result = extract_latex_from_image(image, api_key)
-                        
+                    
                     # 추출 결과 세션에 저장
                     st.session_state.latex_code = latex_result
                     st.session_state.processing_complete = True
+                    
                     st.success("추출된 LaTeX 코드는 우측 '2. LaTeX 코드 편집'에서 확인/수정하세요.")
                     
-                    # 화면 다시 그리기
+                    # 변환 직후 즉시 리런 → 우측 에디터가 st.session_state.latex_code를 읽도록
                     st.experimental_rerun()
         
         except Exception as ex:
@@ -412,25 +409,28 @@ with left_col:
 
 with right_col:
     st.header("2. LaTeX 코드 편집")
-    st.markdown('<div class="editor-section">', unsafe_allow_html=True)
     
-    # Ace 에디터에 현재 세션의 latex_code 표시
+    # (디버깅 용) 현재 세션에 저장된 라텍스 코드 표시
+    # st.write("DEBUG - st.session_state.latex_code:", st.session_state.latex_code)
+    
+    st.markdown('<div class="editor-section">', unsafe_allow_html=True)
     edited_code = st_ace(
         value=st.session_state.latex_code,
         language="latex",
         theme="chrome",
-        placeholder="추출된 LaTeX 코드가 여기에 나타납니다.\n수정이 필요하면 직접 편집하세요.",
+        placeholder="추출된 LaTeX 코드가 여기 표시됩니다.\n수정 시 직접 입력하세요.",
         height=300,
-        key="latex_editor",
+        key="ace_editor",
         wrap=True
     )
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # 에디터 결과를 세션에 바로 반영
-    st.session_state.latex_code = edited_code
+    # 에디터에서 수정된 내용 세션에 저장
+    if edited_code != st.session_state.latex_code:
+        st.session_state.latex_code = edited_code
     
     st.header("3. 렌더링 결과")
-    if st.session_state.latex_code:
+    if st.session_state.latex_code.strip():
         display_latex_with_rendering(st.session_state.latex_code)
         
         # 다운로드 버튼
