@@ -228,56 +228,88 @@ def append_to_sheet(spreadsheet_id, student_id, student_name, latex_code, image_
 
 # 이미지를 OpenAI API로 전송하여 LaTeX 추출하는 함수
 def extract_latex_from_image(image_data, api_key):
-    url = "https://api.openai.com/v1/chat/completions"
-    
-    # 이미지를 base64로 인코딩
-    buffered = io.BytesIO()
-    image_data.save(buffered, format="JPEG")
-    img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-    
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-    
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "system",
-                "content": "당신은 손글씨 수학 문제와 풀이를 LaTeX 코드로 변환하는 전문가입니다. 이미지에서 보이는 수학 표현을 정확하게 LaTeX 코드로 변환해주세요. 설명 없이 LaTeX 코드만 제공해주세요."
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{img_str}"
-                        }
-                    },
-                    {
-                        "type": "text",
-                        "text": "이 수학 손글씨를 LaTeX 코드로 변환해주세요. LaTeX 코드만 제공해주세요."
-                    }
-                ]
-            }
-        ],
-        "max_tokens": 1000,
-        "temperature": 0.3,
-        "seed": 123
-    }
-    
+    """OpenAI API의 o4-mini 모델을 사용하여 이미지에서 LaTeX 코드를 추출합니다."""
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
-        response.raise_for_status()
-        result = response.json()
-        if "choices" in result and len(result["choices"]) > 0:
-            return result["choices"][0]["message"]["content"]
+        # API 키 확인
+        if not api_key or len(api_key) < 10:  # API 키는 일반적으로 길이가 깁니다
+            raise ValueError("유효한 OpenAI API 키를 입력해주세요")
+        
+        # 이미지 전처리
+        if image_data.mode == 'RGBA':
+            image_data = image_data.convert('RGB')
+            
+        # 이미지 크기 제한 (너무 큰 이미지는 처리 속도가 느려짐)
+        max_size = 1800  # 최대 크기 지정
+        if image_data.width > max_size or image_data.height > max_size:
+            # 비율 유지하며 크기 조정
+            ratio = min(max_size / image_data.width, max_size / image_data.height)
+            new_size = (int(image_data.width * ratio), int(image_data.height * ratio))
+            image_data = image_data.resize(new_size, Image.LANCZOS)
+            
+        # 이미지를 Base64로 인코딩
+        buffered = io.BytesIO()
+        image_data.save(buffered, format="PNG")
+        img_bytes = buffered.getvalue()
+        base64_image = base64.b64encode(img_bytes).decode('utf-8')
+        
+        # OpenAI API 요청 설정
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+        
+        # 요청 페이로드 구성 - Chat Completions API 사용
+        payload = {
+            "model": "o4-mini",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "당신은 손글씨 수학 문제와 풀이를 LaTeX 코드로 변환하는 전문가입니다. 이미지에서 보이는 수학 표현을 정확하게 LaTeX 코드로 변환해주세요. 설명 없이 LaTeX 코드만 제공해주세요."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "이 수학 손글씨를 LaTeX 코드로 변환해주세요. LaTeX 코드만 제공해주세요."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{base64_image}",
+                                "detail": "high"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "max_tokens": 1000,
+            "temperature": 0.3,
+            "seed": 123
+        }
+        
+        # API 호출
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=payload
+        )
+        
+        # 응답 확인
+        if response.status_code == 200:
+            result = response.json()
+            if "choices" in result and len(result["choices"]) > 0:
+                extracted_text = result["choices"][0]["message"]["content"]
+                return extracted_text
+            else:
+                return "LaTeX 추출에 실패했습니다. API 응답에서 결과를 찾을 수 없습니다."
         else:
-            return "LaTeX 추출에 실패했습니다. API 응답에서 결과를 찾을 수 없습니다."
+            error_msg = f"API 오류 ({response.status_code}): {response.text}"
+            st.error(error_msg)
+            return f"OpenAI API 오류가 발생했습니다: {error_msg}"
     except Exception as e:
-        return f"오류 발생: {str(e)}"
+        st.error(f"텍스트 추출 오류: {str(e)}")
+        return f"텍스트 추출 중 오류 발생: {str(e)}"
 
 # 사용자 로그인 화면
 if not st.session_state.is_logged_in:
@@ -329,17 +361,43 @@ with col1:
     
     # 이미지 미리보기 및 처리 버튼
     if uploaded_file is not None:
-        image = Image.open(uploaded_file)
-        st.session_state.original_image = image  # 세션에 원본 이미지 저장
-        st.image(image, caption="업로드한 이미지", use_column_width=True)
+        try:
+            # 이미지 로드 및 전처리
+            image = Image.open(uploaded_file)
+            
+            # RGBA 이미지를 RGB로 변환 (알파 채널 제거)
+            if image.mode == 'RGBA':
+                image = image.convert('RGB')
+            
+            # 이미지 크기 제한 (너무 큰 이미지는 처리 속도가 느려짐)
+            max_size = 1800  # 최대 크기 지정
+            if image.width > max_size or image.height > max_size:
+                # 비율 유지하며 크기 조정
+                ratio = min(max_size / image.width, max_size / image.height)
+                new_size = (int(image.width * ratio), int(image.height * ratio))
+                image = image.resize(new_size, Image.LANCZOS)
+            
+            # 세션에 원본 이미지 저장
+            st.session_state.original_image = image
+            
+            # 이미지 표시
+            st.image(image, caption="업로드한 이미지", use_column_width=True)
+            
+            if st.button("이미지 처리하기"):
+                with st.spinner("이미지 분석 중... 잠시만 기다려주세요."):
+                    # API 키 확인
+                    if not api_key:
+                        st.error("OpenAI API 키가 설정되지 않았습니다.")
+                    else:
+                        # API 키를 사용하여 이미지 처리
+                        latex_result = extract_latex_from_image(image, api_key)
+                        st.session_state.latex_code = latex_result
+                        st.session_state.processing_complete = True
+                        st.experimental_rerun()
         
-        if st.button("이미지 처리하기"):
-            with st.spinner("이미지 분석 중... 잠시만 기다려주세요."):
-                # API 키를 사용하여 이미지 처리
-                latex_result = extract_latex_from_image(image, api_key)
-                st.session_state.latex_code = latex_result
-                st.session_state.processing_complete = True
-                st.experimental_rerun()
+        except Exception as e:
+            st.error(f"이미지 처리 중 오류가 발생했습니다: {str(e)}")
+            st.info("다른 이미지 파일을 시도해보세요. JPEG 또는 PNG 형식이 가장 안정적입니다.")
 
 with col2:
     st.header("2. LaTeX 코드 편집")
